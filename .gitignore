@@ -1,0 +1,11 @@
+# Custom
+*.rl
+/.notes
+
+# Rust/Cargo
+/debug
+/target
+**/*.rs.bk
+
+# Logs
+*.log

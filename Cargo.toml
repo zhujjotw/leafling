@@ -1,0 +1,18 @@
+[package]
+name = "leaf"
+version = "1.0.0"
+edition = "2021"
+description = "A friendly terminal Markdown previewer"
+license = "MIT"
+
+[[bin]]
+name = "leaf"
+path = "src/main.rs"
+
+[dependencies]
+ratatui       = "0.29"
+crossterm     = "0.28"
+pulldown-cmark = "0.12"
+syntect       = "5.2"
+anyhow        = "1.0"
+unicode-width = "0.1"
