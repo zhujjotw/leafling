@@ -1,4 +1,7 @@
-use crate::app::{normalize_toc, TocEntry};
+use crate::{
+    app::{normalize_toc, TocEntry},
+    theme::app_theme,
+};
 use pulldown_cmark::{
     Alignment, CodeBlockKind, Event as MdEvent, HeadingLevel, Options, Parser, Tag, TagEnd,
 };
@@ -124,10 +127,16 @@ fn expand_tabs(text: &str, start_width: usize) -> String {
 }
 
 pub(crate) fn highlight_line<'a>(line: &Line<'a>) -> Line<'a> {
+    let theme = &app_theme().markdown;
     Line::from(
         line.spans
             .iter()
-            .map(|span| Span::styled(span.content.clone(), span.style.bg(Color::Rgb(72, 62, 16))))
+            .map(|span| {
+                Span::styled(
+                    span.content.clone(),
+                    span.style.bg(theme.search_highlight_bg),
+                )
+            })
             .collect::<Vec<_>>(),
     )
 }
@@ -200,9 +209,10 @@ fn highlight_code(
     ss: &SyntaxSet,
     theme: &Theme,
 ) -> (Vec<Line<'static>>, usize) {
+    let theme_colors = &app_theme().markdown;
     let syntax = resolve_syntax(lang, ss);
     let mut hl = HighlightLines::new(syntax, theme);
-    let gutter = Style::default().fg(Color::Rgb(40, 48, 68));
+    let gutter = Style::default().fg(theme_colors.code_gutter);
 
     let mut raw: Vec<(Vec<Span<'static>>, usize)> = Vec::new();
     for line_str in LinesWithEndings::from(code) {
@@ -255,10 +265,11 @@ fn highlight_code(
 }
 
 fn block_prefix(in_bq: bool) -> Vec<Span<'static>> {
+    let theme = &app_theme().markdown;
     if in_bq {
         vec![Span::styled(
             "  ▏ ",
-            Style::default().fg(Color::Rgb(75, 80, 148)),
+            Style::default().fg(theme.blockquote_marker),
         )]
     } else {
         vec![Span::raw("  ")]
@@ -270,6 +281,7 @@ fn list_item_prefix(
     list_stack: &[ListKind],
     item_stack: &mut [ItemState],
 ) -> Vec<Span<'static>> {
+    let theme = &app_theme().markdown;
     let mut prefix = block_prefix(in_bq);
     let Some(item) = item_stack.last_mut() else {
         return prefix;
@@ -296,11 +308,11 @@ fn list_item_prefix(
 
     let marker_style = match list_stack.last().copied().unwrap_or(ListKind::Unordered) {
         ListKind::Unordered => match depth {
-            1 => Style::default().fg(Color::Rgb(95, 200, 148)),
-            2 => Style::default().fg(Color::Rgb(138, 155, 200)),
-            _ => Style::default().fg(Color::Rgb(168, 168, 185)),
+            1 => Style::default().fg(theme.list_level_1),
+            2 => Style::default().fg(theme.list_level_2),
+            _ => Style::default().fg(theme.list_level_3),
         },
-        ListKind::Ordered(_) => Style::default().fg(Color::Rgb(95, 200, 148)),
+        ListKind::Ordered(_) => Style::default().fg(theme.ordered_list),
     };
     prefix.push(Span::styled(marker, marker_style));
     prefix
@@ -337,6 +349,7 @@ impl TableBuf {
     }
 
     fn render(&self) -> Vec<Line<'static>> {
+        let theme = &app_theme().markdown;
         if self.rows.is_empty() {
             return vec![];
         }
@@ -354,12 +367,12 @@ impl TableBuf {
             }
         }
 
-        let border = Style::default().fg(Color::Rgb(65, 75, 108));
-        let sep = Style::default().fg(Color::Rgb(55, 65, 95));
+        let border = Style::default().fg(theme.table_border);
+        let sep = Style::default().fg(theme.table_separator);
         let header = Style::default()
-            .fg(Color::Rgb(140, 190, 255))
+            .fg(theme.table_header)
             .add_modifier(Modifier::BOLD);
-        let cell = Style::default().fg(Color::Rgb(205, 208, 218));
+        let cell = Style::default().fg(theme.table_cell);
         let ind = "  ";
 
         let mut out: Vec<Line<'static>> = vec![Line::from("")];
@@ -476,6 +489,7 @@ pub(crate) fn parse_markdown(
     ss: &SyntaxSet,
     theme: &Theme,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>) {
+    let theme_colors = &app_theme().markdown;
     let src = strip_frontmatter(src);
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut toc: Vec<TocEntry> = Vec::new();
@@ -568,10 +582,10 @@ pub(crate) fn parse_markdown(
             MdEvent::End(TagEnd::Heading(_)) => {
                 let lvl = in_heading.unwrap_or(1);
                 let (color, marker): (Color, &str) = match lvl {
-                    1 => (Color::Rgb(140, 190, 255), "█ "),
-                    2 => (Color::Rgb(120, 210, 170), "▌ "),
-                    3 => (Color::Rgb(210, 180, 120), "▎ "),
-                    _ => (Color::Rgb(180, 180, 190), "  "),
+                    1 => (theme_colors.heading_1, "█ "),
+                    2 => (theme_colors.heading_2, "▌ "),
+                    3 => (theme_colors.heading_3, "▎ "),
+                    _ => (theme_colors.heading_other, "  "),
                 };
                 let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
                 let title: String = spans.iter().map(|s| s.content.as_ref()).collect();
@@ -584,7 +598,7 @@ pub(crate) fn parse_markdown(
                     Span::raw("  "),
                     Span::styled(
                         marker.to_string(),
-                        Style::default().fg(Color::Rgb(55, 75, 115)),
+                        Style::default().fg(theme_colors.heading_marker),
                     ),
                 ];
                 all.extend(spans.drain(..).map(|s| Span::styled(s.content, style)));
@@ -592,7 +606,7 @@ pub(crate) fn parse_markdown(
                 if lvl == 1 {
                     lines.push(Line::from(Span::styled(
                         format!("  {}", "─".repeat((display_width(&title) + 4).min(68))),
-                        Style::default().fg(Color::Rgb(40, 50, 75)),
+                        Style::default().fg(theme_colors.heading_underline),
                     )));
                 }
                 lines.push(Line::from(""));
@@ -630,21 +644,21 @@ pub(crate) fn parse_markdown(
                     Span::raw("  "),
                     Span::styled(
                         "╭─ ".to_string(),
-                        Style::default().fg(Color::Rgb(40, 48, 68)),
+                        Style::default().fg(theme_colors.code_frame),
                     ),
                     Span::styled(
                         format!("{} ", ld),
-                        Style::default().fg(Color::Rgb(95, 110, 145)),
+                        Style::default().fg(theme_colors.code_label),
                     ),
                     Span::styled(
                         format!("{}╮", top_bar),
-                        Style::default().fg(Color::Rgb(40, 48, 68)),
+                        Style::default().fg(theme_colors.code_frame),
                     ),
                 ]));
                 lines.extend(code_lines);
                 lines.push(Line::from(Span::styled(
                     format!("  ╰{}╯", "─".repeat(inner_width)),
-                    Style::default().fg(Color::Rgb(40, 48, 68)),
+                    Style::default().fg(theme_colors.code_frame),
                 )));
                 lines.push(Line::from(""));
                 code_lang.clear();
@@ -654,8 +668,8 @@ pub(crate) fn parse_markdown(
                 spans.push(Span::styled(
                     format!(" {} ", text.as_ref()),
                     Style::default()
-                        .fg(Color::Rgb(235, 155, 115))
-                        .bg(Color::Rgb(40, 30, 28)),
+                        .fg(theme_colors.inline_code_fg)
+                        .bg(theme_colors.inline_code_bg),
                 ));
             }
             MdEvent::Start(Tag::BlockQuote(_)) => {
@@ -664,7 +678,7 @@ pub(crate) fn parse_markdown(
             MdEvent::End(TagEnd::BlockQuote(_)) => {
                 flush!(vec![Span::styled(
                     "  ▏ ",
-                    Style::default().fg(Color::Rgb(75, 80, 148))
+                    Style::default().fg(theme_colors.blockquote_marker)
                 )]);
                 blockquote_depth = blockquote_depth.saturating_sub(1);
                 lines.push(Line::from(""));
@@ -703,7 +717,7 @@ pub(crate) fn parse_markdown(
                 lines.push(Line::from(""));
                 lines.push(Line::from(Span::styled(
                     format!("  {}", "─".repeat(62)),
-                    Style::default().fg(Color::Rgb(48, 56, 76)),
+                    Style::default().fg(theme_colors.rule),
                 )));
                 lines.push(Line::from(""));
             }
@@ -717,7 +731,7 @@ pub(crate) fn parse_markdown(
                 in_link = true;
                 spans.push(Span::styled(
                     "⌗",
-                    Style::default().fg(Color::Rgb(85, 148, 235)),
+                    Style::default().fg(theme_colors.link_icon),
                 ));
             }
             MdEvent::End(TagEnd::Link) => in_link = false,
@@ -728,16 +742,16 @@ pub(crate) fn parse_markdown(
                     let content = text.to_string();
                     let mut style = if blockquote_depth > 0 {
                         Style::default()
-                            .fg(Color::Rgb(148, 148, 195))
+                            .fg(theme_colors.blockquote_text)
                             .add_modifier(Modifier::ITALIC)
                     } else if in_link {
-                        Style::default().fg(Color::Rgb(88, 152, 238))
+                        Style::default().fg(theme_colors.link_text)
                     } else {
-                        Style::default().fg(Color::Rgb(208, 210, 218))
+                        Style::default().fg(theme_colors.text)
                     };
                     if in_strong {
                         style = style
-                            .fg(Color::Rgb(245, 245, 255))
+                            .fg(theme_colors.strong_text)
                             .add_modifier(Modifier::BOLD);
                     }
                     if in_em {

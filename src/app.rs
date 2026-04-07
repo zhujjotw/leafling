@@ -1,13 +1,17 @@
 use crate::{
     markdown::{build_plain_lines, hash_file_contents, hash_str, parse_markdown, read_file_state},
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
+    theme::{
+        current_syntect_theme, current_theme_preset, set_theme_preset, theme_preset_index,
+        ThemePreset, THEME_PRESETS,
+    },
 };
 use ratatui::text::Line;
 use std::{
     path::PathBuf,
     time::{Duration, Instant, SystemTime},
 };
-use syntect::{highlighting::Theme, parsing::SyntaxSet};
+use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 #[derive(Clone)]
 pub(crate) struct TocEntry {
@@ -42,6 +46,12 @@ pub(crate) struct StatusCacheKey {
     pub(crate) flash_active: bool,
 }
 
+#[derive(Clone)]
+pub(crate) struct ThemePreviewCacheEntry {
+    pub(crate) lines: Vec<Line<'static>>,
+    pub(crate) toc: Vec<TocEntry>,
+}
+
 pub(crate) struct App {
     pub(crate) lines: Vec<Line<'static>>,
     pub(crate) plain_lines: Vec<String>,
@@ -56,6 +66,7 @@ pub(crate) struct App {
     pub(crate) search_idx: usize,
     pub(crate) debug_input: bool,
     pub(crate) filename: String,
+    pub(crate) source: String,
     pub(crate) watch: bool,
     pub(crate) filepath: Option<PathBuf>,
     pub(crate) last_file_state: Option<FileState>,
@@ -68,13 +79,51 @@ pub(crate) struct App {
     pub(crate) toc_active_idx: Option<usize>,
     pub(crate) status_line: Line<'static>,
     pub(crate) status_cache_key: Option<StatusCacheKey>,
+    pub(crate) theme_picker_open: bool,
+    pub(crate) theme_picker_index: usize,
+    pub(crate) theme_picker_original: Option<ThemePreset>,
+    pub(crate) theme_preview_cache: Vec<Option<ThemePreviewCacheEntry>>,
 }
 
 impl App {
+    #[cfg(test)]
     pub(crate) fn new(
         lines: Vec<Line<'static>>,
         toc: Vec<TocEntry>,
         filename: String,
+        debug_input: bool,
+        watch: bool,
+        filepath: Option<PathBuf>,
+        last_file_state: Option<FileState>,
+    ) -> Self {
+        let source = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|s| s.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        Self::new_with_source(
+            lines,
+            toc,
+            filename,
+            source,
+            debug_input,
+            watch,
+            filepath,
+            last_file_state,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_with_source(
+        lines: Vec<Line<'static>>,
+        toc: Vec<TocEntry>,
+        filename: String,
+        source: String,
         debug_input: bool,
         watch: bool,
         filepath: Option<PathBuf>,
@@ -95,6 +144,7 @@ impl App {
             search_idx: 0,
             debug_input,
             filename,
+            source,
             watch,
             filepath,
             last_file_state,
@@ -107,7 +157,12 @@ impl App {
             toc_active_idx: None,
             status_line: Line::default(),
             status_cache_key: None,
+            theme_picker_open: false,
+            theme_picker_index: theme_preset_index(current_theme_preset()),
+            theme_picker_original: None,
+            theme_preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
         };
+        app.store_current_theme_preview();
         app.refresh_static_caches();
         app
     }
@@ -126,6 +181,7 @@ impl App {
         self.lines = lines;
         self.toc = toc;
         self.highlighted_line_cache = None;
+        self.toc_header_line = toc_header_line();
         self.refresh_static_caches();
     }
 
@@ -250,6 +306,123 @@ impl App {
         self.toc_display_lines.clear();
         self.refresh_toc_cache();
         self.status_cache_key = None;
+    }
+
+    pub(crate) fn invalidate_theme_preview_cache(&mut self) {
+        self.theme_preview_cache.fill(None);
+    }
+
+    fn store_theme_preview(
+        &mut self,
+        preset: ThemePreset,
+        lines: &[Line<'static>],
+        toc: &[TocEntry],
+    ) {
+        let idx = theme_preset_index(preset);
+        if let Some(slot) = self.theme_preview_cache.get_mut(idx) {
+            *slot = Some(ThemePreviewCacheEntry {
+                lines: lines.to_vec(),
+                toc: toc.to_vec(),
+            });
+        }
+    }
+
+    fn store_current_theme_preview(&mut self) {
+        let preset = current_theme_preset();
+        let lines = self.lines.clone();
+        let toc = self.toc.clone();
+        self.store_theme_preview(preset, &lines, &toc);
+    }
+
+    pub(crate) fn open_theme_picker(&mut self) {
+        self.theme_picker_open = true;
+        let current = current_theme_preset();
+        self.theme_picker_index = theme_preset_index(current);
+        self.theme_picker_original = Some(current);
+        self.store_current_theme_preview();
+    }
+
+    pub(crate) fn close_theme_picker(&mut self) {
+        self.theme_picker_open = false;
+        self.theme_picker_original = None;
+    }
+
+    pub(crate) fn is_theme_picker_open(&self) -> bool {
+        self.theme_picker_open
+    }
+
+    pub(crate) fn theme_picker_index(&self) -> usize {
+        self.theme_picker_index
+    }
+
+    pub(crate) fn theme_picker_reference_preset(&self) -> ThemePreset {
+        self.theme_picker_original.unwrap_or(current_theme_preset())
+    }
+
+    pub(crate) fn move_theme_picker_up(&mut self) {
+        let total = THEME_PRESETS.len();
+        if total == 0 {
+            return;
+        }
+        if self.theme_picker_index == 0 {
+            self.theme_picker_index = total - 1;
+        } else {
+            self.theme_picker_index -= 1;
+        }
+    }
+
+    pub(crate) fn move_theme_picker_down(&mut self) {
+        let total = THEME_PRESETS.len();
+        if total == 0 {
+            return;
+        }
+        self.theme_picker_index = (self.theme_picker_index + 1) % total;
+    }
+
+    pub(crate) fn set_theme_picker_index(&mut self, idx: usize) -> bool {
+        if idx < THEME_PRESETS.len() {
+            self.theme_picker_index = idx;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn selected_theme_preset(&self) -> Option<ThemePreset> {
+        THEME_PRESETS.get(self.theme_picker_index).copied()
+    }
+
+    pub(crate) fn preview_theme_preset(
+        &mut self,
+        preset: ThemePreset,
+        ss: &SyntaxSet,
+        themes: &ThemeSet,
+    ) {
+        if current_theme_preset() == preset {
+            return;
+        }
+        set_theme_preset(preset);
+        let cached = self
+            .theme_preview_cache
+            .get(theme_preset_index(preset))
+            .and_then(|entry| entry.as_ref())
+            .cloned();
+        if let Some(entry) = cached {
+            self.replace_content(entry.lines, entry.toc);
+            return;
+        }
+
+        let theme = current_syntect_theme(themes);
+        let (new_lines, new_toc) = parse_markdown(&self.source, ss, theme);
+        self.store_theme_preview(preset, &new_lines, &new_toc);
+        self.replace_content(new_lines, new_toc);
+    }
+
+    pub(crate) fn restore_theme_picker_preview(&mut self, ss: &SyntaxSet, themes: &ThemeSet) {
+        if let Some(original) = self.theme_picker_original {
+            self.preview_theme_preset(original, ss, themes);
+        }
+        self.close_theme_picker();
     }
 
     pub(crate) fn scroll_down(&mut self, n: usize) {
@@ -405,7 +578,26 @@ impl App {
         }
     }
 
-    pub(crate) fn reload(&mut self, ss: &SyntaxSet, theme: &Theme) -> bool {
+    pub(crate) fn reparse_source(&mut self, ss: &SyntaxSet, themes: &ThemeSet) {
+        let theme = current_syntect_theme(themes);
+        let old_total = self.total();
+        let (new_lines, new_toc) = parse_markdown(&self.source, ss, theme);
+        let new_total = new_lines.len();
+
+        if old_total > 0 {
+            self.scroll = ((self.scroll as f64 / old_total as f64) * new_total as f64) as usize;
+            self.scroll = self.scroll.min(new_total.saturating_sub(1));
+        }
+
+        self.invalidate_theme_preview_cache();
+        self.store_theme_preview(current_theme_preset(), &new_lines, &new_toc);
+        self.replace_content(new_lines, new_toc);
+        if !self.search_query.is_empty() && !self.search_mode {
+            self.run_search();
+        }
+    }
+
+    pub(crate) fn reload(&mut self, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
         let path = match &self.filepath {
             Some(p) => p,
             None => return false,
@@ -416,25 +608,13 @@ impl App {
         };
         let file_state = read_file_state(path);
         let content_hash = hash_str(&src);
+        self.source = src;
 
-        let old_total = self.total();
-        let (new_lines, new_toc) = parse_markdown(&src, ss, theme);
-        let new_total = new_lines.len();
-
-        if old_total > 0 {
-            self.scroll = ((self.scroll as f64 / old_total as f64) * new_total as f64) as usize;
-            self.scroll = self.scroll.min(new_total.saturating_sub(1));
-        }
-
-        self.replace_content(new_lines, new_toc);
+        self.reparse_source(ss, themes);
         self.last_file_state = file_state;
         self.last_content_hash = content_hash;
         self.last_hash_check = Some(Instant::now());
         self.reload_flash = Some(Instant::now());
-
-        if !self.search_query.is_empty() && !self.search_mode {
-            self.run_search();
-        }
         true
     }
 }
