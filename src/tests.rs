@@ -1,5 +1,6 @@
 use crate::theme::{current_theme_preset, set_theme_preset, theme_preset_index};
 use crate::*;
+use crate::markdown::{parse_markdown, parse_markdown_with_width};
 use crossterm::event::KeyEventKind;
 use ratatui::backend::TestBackend;
 use ratatui::{text::Line, widgets::Paragraph, Terminal};
@@ -48,12 +49,6 @@ fn find_symbol(buffer: &ratatui::buffer::Buffer, symbol: &str) -> Option<(u16, u
         }
     }
     None
-}
-
-fn line_symbols(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
-    (0..buffer.area.width)
-        .filter_map(|x| buffer.cell((x, y)).map(|cell| cell.symbol().to_string()))
-        .collect()
 }
 
 fn rendered_non_empty_lines(lines: &[Line<'static>]) -> Vec<String> {
@@ -226,8 +221,8 @@ fn code_block_box_renders_right_border_in_one_column() {
     let (lines, _) = parse_markdown(md, &ss, &theme);
     let buffer = render_buffer(&lines);
 
-    let (right_x, start_y) = find_symbol(&buffer, "╮").unwrap();
-    let (_, end_y) = find_symbol(&buffer, "╯").unwrap();
+    let (right_x, start_y) = find_symbol(&buffer, "┐").unwrap();
+    let (_, end_y) = find_symbol(&buffer, "┘").unwrap();
 
     for y in start_y + 1..end_y {
         assert_eq!(
@@ -245,8 +240,8 @@ fn table_render_right_border_stays_aligned() {
     let (lines, _) = parse_markdown(md, &ss, &theme);
     let buffer = render_buffer(&lines);
 
-    let (right_x, start_y) = find_symbol(&buffer, "╮").unwrap();
-    let (_, end_y) = find_symbol(&buffer, "╯").unwrap();
+    let (right_x, start_y) = find_symbol(&buffer, "┐").unwrap();
+    let (_, end_y) = find_symbol(&buffer, "┘").unwrap();
 
     for y in start_y + 1..end_y {
         let symbol = buffer.cell((right_x, y)).unwrap().symbol();
@@ -258,19 +253,24 @@ fn table_render_right_border_stays_aligned() {
 }
 
 #[test]
-fn h1_underline_matches_display_width_for_wide_titles() {
+fn narrow_tables_fit_render_width_and_wrap_cells() {
+    let (ss, theme) = test_assets();
+    let md = "| Column | Description | Value |\n| --- | --- | ---: |\n| Width | Terminal-dependent layout behavior | 80 |\n";
+    let (lines, _) = parse_markdown_with_width(md, &ss, &theme, 36);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(rendered.len() >= 6);
+    assert!(rendered.iter().all(|line| display_width(line) <= 36));
+}
+
+#[test]
+fn h1_headings_render_double_rule_without_bottom_spacing() {
     let (ss, theme) = test_assets();
     let (lines, _) = parse_markdown("# 東京\n", &ss, &theme);
-    let title_y = lines
-        .iter()
-        .position(|line| line_plain_text(line).contains("東京"))
-        .unwrap() as u16;
-    let underline_y = title_y + 1;
-    let buffer = render_buffer(&lines);
+    let rendered = rendered_non_empty_lines(&lines);
 
-    let underline = line_symbols(&buffer, underline_y);
-    let underline_count = underline.chars().filter(|&ch| ch == '─').count();
-    assert_eq!(underline_count, display_width("東京") + 4);
+    assert_eq!(rendered[0], "東京");
+    assert_eq!(rendered[1], "═".repeat(display_width("東京")));
 }
 
 #[test]
@@ -310,7 +310,7 @@ fn multiline_list_items_keep_marker_only_on_first_line() {
 
     assert!(first.contains("• first line"));
     assert!(!second.contains('•'));
-    assert!(second.starts_with("    "));
+    assert!(second.starts_with("  "));
 }
 
 #[test]
@@ -333,10 +333,10 @@ fn loose_list_items_render_expected_lines() {
     assert_eq!(
         rendered,
         vec![
-            "  • first loose item",
-            "  • second loose item after a blank line",
-            "  • third loose item",
-            "    continuation paragraph",
+            "• first loose item",
+            "• second loose item after a blank line",
+            "• third loose item",
+            "  continuation paragraph",
         ]
     );
 }
@@ -351,9 +351,9 @@ fn ordered_loose_lists_render_expected_lines() {
     assert_eq!(
         rendered,
         vec![
-            "  7. seventh item",
-            "  8. eighth item",
-            "     continuation paragraph",
+            "7. seventh item",
+            "8. eighth item",
+            "   continuation paragraph",
         ]
     );
 }
@@ -364,7 +364,28 @@ fn ordered_lists_render_expected_lines() {
     let (lines, _) = parse_markdown("3. third item\n4. fourth item\n", &ss, &theme);
     let rendered = rendered_non_empty_lines(&lines);
 
-    assert_eq!(rendered, vec!["  3. third item", "  4. fourth item"]);
+    assert_eq!(rendered, vec!["3. third item", "4. fourth item"]);
+}
+
+#[test]
+fn paragraph_and_following_list_have_no_blank_gap() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("Intro paragraph\n\n- first\n- second\n", &ss, &theme);
+    let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
+    let intro_idx = rendered.iter().position(|line| line == "Intro paragraph").unwrap();
+
+    assert_eq!(rendered[intro_idx + 1], "• first");
+}
+
+#[test]
+fn paragraph_and_following_code_block_have_no_blank_gap() {
+    let (ss, theme) = test_assets();
+    let src = "Intro paragraph\n\n```rs\nfn main() {}\n```\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
+    let intro_idx = rendered.iter().position(|line| line == "Intro paragraph").unwrap();
+
+    assert!(rendered[intro_idx + 1].starts_with("┌─ rs "));
 }
 
 #[test]
@@ -374,9 +395,24 @@ fn nested_blockquotes_keep_quote_prefix_after_inner_quote_ends() {
     let (lines, _) = parse_markdown(src, &ss, &theme);
     let rendered = rendered_non_empty_lines(&lines);
 
-    assert!(rendered.iter().any(|line| line == "  ▏ outer"));
-    assert!(rendered.iter().any(|line| line == "  ▏ inner"));
-    assert!(rendered.iter().any(|line| line == "  ▏ outer again"));
+    assert!(rendered.iter().any(|line| line == "▏ outer"));
+    assert!(rendered.iter().any(|line| line == "▏ inner"));
+    assert!(rendered.iter().any(|line| line == "▏ outer again"));
+}
+
+#[test]
+fn long_blockquotes_wrap_into_multiple_prefixed_lines() {
+    let (ss, theme) = test_assets();
+    let src = "> This is a long blockquote line that should wrap into multiple quoted lines at narrow widths.\n";
+    let (lines, _) = parse_markdown_with_width(src, &ss, &theme, 28);
+    let rendered = rendered_non_empty_lines(&lines);
+    let quoted: Vec<_> = rendered
+        .into_iter()
+        .filter(|line| line.starts_with('▏'))
+        .collect();
+
+    assert!(quoted.len() >= 2);
+    assert!(quoted.iter().all(|line| line.starts_with("▏ ")));
 }
 
 #[test]
@@ -401,6 +437,31 @@ fn frontmatter_is_ignored_in_preview_and_toc() {
     assert!(rendered.iter().any(|line| line.contains("Visible")));
     assert_eq!(toc.len(), 1);
     assert_eq!(toc[0].title, "Visible");
+}
+
+#[test]
+fn h2_headings_are_underlined_and_compact() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown_with_width("Intro\n\n## Section\nBody\n", &ss, &theme, 40);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(rendered.iter().any(|line| line.contains("Section")));
+    assert!(rendered.iter().any(|line| line.contains("────")));
+}
+
+#[test]
+fn rules_use_render_width_without_extra_blank_after() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown_with_width("Alpha\n\n---\nBeta\n", &ss, &theme, 24);
+    let rendered = rendered_non_empty_lines(&lines);
+    let rule = rendered
+        .iter()
+        .find(|line| line.trim_start().starts_with('─'))
+        .unwrap();
+
+    assert_eq!(display_width(rule.trim_start()), 24);
+    let rule_idx = rendered.iter().position(|line| line == rule).unwrap();
+    assert_eq!(rendered[rule_idx + 1], "Beta");
 }
 
 #[test]

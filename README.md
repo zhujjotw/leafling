@@ -76,7 +76,7 @@ cat TESTING.md | leaf
 - ✅ Unicode box-drawing tables with left / center / right alignment
 - ✅ TOC sidebar with active section tracking and two-level navigation
 - ✅ Search with match highlighting and `n` / `N`
-- ✅ Code blocks `╭─ lang ───╮`
+- ✅ Code blocks `┌─ lang ───┐`
 - ✅ Bold, italic, strikethrough, blockquotes, lists, and horizontal rules
 - ✅ YAML frontmatter is ignored in both preview and TOC
 - ✅ Native stdin input
@@ -95,4 +95,5 @@ leaf --watch notes.md
 
 - [x] Themes (light / custom)
 - [ ] Copy code block `y`
+- [ ] Code block horizontal scroll
 - [ ] Improve search performance on large files
