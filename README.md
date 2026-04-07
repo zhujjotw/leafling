@@ -62,6 +62,7 @@ cat TESTING.md | leaf
 | `g` / Home | Top |
 | `G` / End | Bottom |
 | `t` | Toggle TOC sidebar |
+| `T` | Open theme picker |
 | `1`–`9` | Jump to TOC section N |
 | `/` | Search |
 | `n` / `N` | Next / prev match |
@@ -92,6 +93,6 @@ leaf --watch notes.md
 
 ## Roadmap
 
-- [ ] Themes (light / custom)
+- [x] Themes (light / custom)
 - [ ] Copy code block `y`
 - [ ] Improve search performance on large files

@@ -6,7 +6,7 @@ use anyhow::Result;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{fs::OpenOptions, io, io::Write, time::Duration};
-use syntect::{highlighting::Theme, parsing::SyntaxSet};
+use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 pub(crate) fn should_handle_key(kind: KeyEventKind) -> bool {
     !matches!(kind, KeyEventKind::Release)
@@ -29,7 +29,7 @@ pub(crate) fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
     ss: &SyntaxSet,
-    theme: &Theme,
+    themes: &ThemeSet,
 ) -> Result<()> {
     const WATCH_INTERVAL: Duration = Duration::from_millis(250);
     const FLASH_DURATION: Duration = Duration::from_millis(1500);
@@ -77,7 +77,36 @@ pub(crate) fn run(
                         continue;
                     }
                     let mut state_changed = true;
-                    if app.search_mode {
+                    if app.is_theme_picker_open() {
+                        match key.code {
+                            KeyCode::Esc => {
+                                app.restore_theme_picker_preview(ss, themes);
+                                needs_redraw = true;
+                                state_changed = false;
+                            }
+                            KeyCode::Enter => app.close_theme_picker(),
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                app.move_theme_picker_down();
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                app.move_theme_picker_up();
+                            }
+                            KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
+                                if let Some(n) = c.to_digit(10) {
+                                    let idx = n as usize - 1;
+                                    if !app.set_theme_picker_index(idx) {
+                                        state_changed = false;
+                                    }
+                                }
+                            }
+                            _ => state_changed = false,
+                        }
+                        if state_changed {
+                            if let Some(preset) = app.selected_theme_preset() {
+                                app.preview_theme_preset(preset, ss, themes);
+                            }
+                        }
+                    } else if app.search_mode {
                         match key.code {
                             KeyCode::Esc => app.cancel_search(),
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -117,9 +146,12 @@ pub(crate) fn run(
                             KeyCode::Char('t') => {
                                 app.toc_visible = !app.toc_visible;
                             }
+                            KeyCode::Char('T') => {
+                                app.open_theme_picker();
+                            }
                             KeyCode::Char('r') if app.watch => {
                                 app.last_file_state = None;
-                                app.reload(ss, theme);
+                                app.reload(ss, themes);
                             }
                             KeyCode::Char('/') => app.begin_search(),
                             KeyCode::Char('n') => app.next_match(),
@@ -137,16 +169,20 @@ pub(crate) fn run(
                     }
                 }
                 Event::Mouse(mouse) => {
-                    let state_changed = match mouse.kind {
-                        MouseEventKind::ScrollUp => {
-                            app.scroll_up(MOUSE_SCROLL_STEP);
-                            true
+                    let state_changed = if app.is_theme_picker_open() {
+                        false
+                    } else {
+                        match mouse.kind {
+                            MouseEventKind::ScrollUp => {
+                                app.scroll_up(MOUSE_SCROLL_STEP);
+                                true
+                            }
+                            MouseEventKind::ScrollDown => {
+                                app.scroll_down(MOUSE_SCROLL_STEP);
+                                true
+                            }
+                            _ => false,
                         }
-                        MouseEventKind::ScrollDown => {
-                            app.scroll_down(MOUSE_SCROLL_STEP);
-                            true
-                        }
-                        _ => false,
                     };
                     if state_changed {
                         needs_redraw = true;
@@ -160,7 +196,7 @@ pub(crate) fn run(
         if app.watch {
             if let Some(change) = app.check_modified() {
                 std::thread::sleep(Duration::from_millis(50));
-                if app.reload(ss, theme) {
+                if app.reload(ss, themes) {
                     app.last_file_state = Some(match change {
                         FileChange::Metadata(state) | FileChange::Content(state) => state,
                     });

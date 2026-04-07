@@ -1,11 +1,15 @@
+use crate::theme::{current_theme_preset, set_theme_preset, theme_preset_index};
 use crate::*;
 use crossterm::event::KeyEventKind;
 use ratatui::backend::TestBackend;
 use ratatui::{text::Line, widgets::Paragraph, Terminal};
+use std::sync::{Mutex, MutexGuard};
 use syntect::{
     highlighting::{Theme, ThemeSet},
     parsing::SyntaxSet,
 };
+
+static THEME_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
 fn test_assets() -> (SyntaxSet, Theme) {
     let ss = SyntaxSet::load_defaults_newlines();
@@ -58,6 +62,10 @@ fn rendered_non_empty_lines(lines: &[Line<'static>]) -> Vec<String> {
         .map(line_plain_text)
         .filter(|line| !line.is_empty())
         .collect()
+}
+
+fn lock_theme_test_state() -> MutexGuard<'static, ()> {
+    THEME_TEST_MUTEX.lock().unwrap()
 }
 
 #[test]
@@ -448,4 +456,92 @@ fn toc_promotes_h2_when_document_has_no_h1() {
     assert_eq!(normalized.len(), 2);
     assert_eq!(normalized[0].level, 2);
     assert_eq!(normalized[1].level, 3);
+}
+
+#[test]
+fn parse_theme_preset_supports_ocean_and_forest() {
+    assert_eq!(parse_theme_preset("arctic"), Some(ThemePreset::Arctic));
+    assert_eq!(parse_theme_preset("ocean"), Some(ThemePreset::OceanDark));
+    assert_eq!(parse_theme_preset("forest"), Some(ThemePreset::Forest));
+    assert_eq!(
+        parse_theme_preset("solarized-dark"),
+        Some(ThemePreset::SolarizedDark)
+    );
+    assert_eq!(parse_theme_preset("nope"), None);
+}
+
+#[test]
+fn theme_presets_are_in_alphabetical_order() {
+    let labels: Vec<_> = THEME_PRESETS
+        .iter()
+        .map(|preset| theme_preset_label(*preset))
+        .collect();
+    let mut sorted = labels.clone();
+    sorted.sort();
+    assert_eq!(labels, sorted);
+}
+
+#[test]
+fn theme_picker_restores_original_preset_on_escape() {
+    let _guard = lock_theme_test_state();
+    let (ss, theme) = test_assets();
+    let ts = ThemeSet::load_defaults();
+    let (lines, toc) = parse_markdown("# Demo\n", &ss, &theme);
+    let mut app = App::new_with_source(
+        lines,
+        toc,
+        "stdin".to_string(),
+        "# Demo\n".to_string(),
+        false,
+        false,
+        None,
+        None,
+    );
+
+    let original = current_theme_preset();
+    set_theme_preset(ThemePreset::OceanDark);
+    app.open_theme_picker();
+    app.theme_picker_index = theme_preset_index(ThemePreset::Forest);
+    app.preview_theme_preset(ThemePreset::Forest, &ss, &ts);
+
+    assert_eq!(current_theme_preset(), ThemePreset::Forest);
+
+    app.restore_theme_picker_preview(&ss, &ts);
+
+    assert_eq!(current_theme_preset(), ThemePreset::OceanDark);
+    assert!(!app.theme_picker_open);
+    assert_eq!(app.theme_picker_original, None);
+    set_theme_preset(original);
+}
+
+#[test]
+fn theme_picker_caches_previewed_themes_for_reuse() {
+    let _guard = lock_theme_test_state();
+    let (ss, theme) = test_assets();
+    let ts = ThemeSet::load_defaults();
+    let (lines, toc) = parse_markdown("# Demo\n\n```rs\nfn main() {}\n```\n", &ss, &theme);
+    let mut app = App::new_with_source(
+        lines,
+        toc,
+        "stdin".to_string(),
+        "# Demo\n\n```rs\nfn main() {}\n```\n".to_string(),
+        false,
+        false,
+        None,
+        None,
+    );
+
+    let original = current_theme_preset();
+    set_theme_preset(ThemePreset::OceanDark);
+    app.open_theme_picker();
+    app.preview_theme_preset(ThemePreset::Forest, &ss, &ts);
+
+    let cached = app.theme_preview_cache[theme_preset_index(ThemePreset::Forest)].as_ref();
+    assert!(cached.is_some());
+    assert_eq!(current_theme_preset(), ThemePreset::Forest);
+
+    app.preview_theme_preset(ThemePreset::OceanDark, &ss, &ts);
+    assert_eq!(current_theme_preset(), ThemePreset::OceanDark);
+    assert!(app.theme_preview_cache[theme_preset_index(ThemePreset::OceanDark)].is_some());
+    set_theme_preset(original);
 }

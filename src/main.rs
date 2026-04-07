@@ -11,12 +11,14 @@ mod runtime;
 mod terminal;
 #[cfg(test)]
 mod tests;
+mod theme;
 
 use app::App;
 use cli::{parse_cli, print_usage, print_version, CliOptions};
 use markdown::{hash_str, parse_markdown, read_file_state};
 use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
+use theme::{current_syntect_theme, set_theme_preset};
 
 #[cfg(test)]
 pub(crate) use app::{
@@ -26,6 +28,8 @@ pub(crate) use app::{
 pub(crate) use markdown::{display_width, line_plain_text};
 #[cfg(test)]
 pub(crate) use runtime::should_handle_key;
+#[cfg(test)]
+pub(crate) use theme::{parse_theme_preset, theme_preset_label, ThemePreset, THEME_PRESETS};
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -43,8 +47,10 @@ fn main() -> Result<()> {
         watch,
         debug_input,
         file_arg,
+        theme,
         ..
     } = options;
+    set_theme_preset(theme);
 
     if debug_input {
         let mut file = OpenOptions::new()
@@ -83,16 +89,17 @@ fn main() -> Result<()> {
 
     let ss = SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
-    let theme = ts.themes["base16-ocean.dark"].clone();
+    let theme = current_syntect_theme(&ts).clone();
 
     let last_file_state = filepath.as_ref().and_then(read_file_state);
     let last_content_hash = hash_str(&src);
 
     let (lines, toc) = parse_markdown(&src, &ss, &theme);
-    let mut app = App::new(
+    let mut app = App::new_with_source(
         lines,
         toc,
         filename,
+        src,
         debug_input,
         watch,
         filepath,
@@ -103,7 +110,7 @@ fn main() -> Result<()> {
     let mut stdout = io::stdout();
     let mut session = TerminalSession::enter(&mut stdout)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
-    let run_result = run(&mut terminal, &mut app, &ss, &theme);
+    let run_result = run(&mut terminal, &mut app, &ss, &ts);
     let restore_result = session.restore(&mut terminal);
     finish_with_restore(run_result, restore_result)
 }
