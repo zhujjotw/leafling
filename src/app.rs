@@ -1,5 +1,7 @@
 use crate::{
-    markdown::{build_plain_lines, hash_file_contents, hash_str, parse_markdown, read_file_state},
+    markdown::{
+        build_plain_lines, hash_file_contents, hash_str, parse_markdown_with_width, read_file_state,
+    },
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
     theme::{
         current_syntect_theme, current_theme_preset, set_theme_preset, theme_preset_index,
@@ -83,6 +85,7 @@ pub(crate) struct App {
     pub(crate) theme_picker_index: usize,
     pub(crate) theme_picker_original: Option<ThemePreset>,
     pub(crate) theme_preview_cache: Vec<Option<ThemePreviewCacheEntry>>,
+    pub(crate) render_width: usize,
 }
 
 impl App {
@@ -161,6 +164,7 @@ impl App {
             theme_picker_index: theme_preset_index(current_theme_preset()),
             theme_picker_original: None,
             theme_preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
+            render_width: 80,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -413,7 +417,8 @@ impl App {
         }
 
         let theme = current_syntect_theme(themes);
-        let (new_lines, new_toc) = parse_markdown(&self.source, ss, theme);
+        let (new_lines, new_toc) =
+            parse_markdown_with_width(&self.source, ss, theme, self.render_width);
         self.store_theme_preview(preset, &new_lines, &new_toc);
         self.replace_content(new_lines, new_toc);
     }
@@ -553,6 +558,21 @@ impl App {
         ((self.scroll * 100) / (self.total() - vh).max(1)) as u16
     }
 
+    pub(crate) fn sync_render_width(
+        &mut self,
+        render_width: usize,
+        ss: &SyntaxSet,
+        themes: &ThemeSet,
+    ) -> bool {
+        let next_width = render_width.max(20);
+        if self.render_width == next_width {
+            return false;
+        }
+        self.render_width = next_width;
+        self.reparse_source(ss, themes);
+        true
+    }
+
     pub(crate) fn check_modified(&mut self) -> Option<FileChange> {
         const HASH_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -581,7 +601,8 @@ impl App {
     pub(crate) fn reparse_source(&mut self, ss: &SyntaxSet, themes: &ThemeSet) {
         let theme = current_syntect_theme(themes);
         let old_total = self.total();
-        let (new_lines, new_toc) = parse_markdown(&self.source, ss, theme);
+        let (new_lines, new_toc) =
+            parse_markdown_with_width(&self.source, ss, theme, self.render_width);
         let new_total = new_lines.len();
 
         if old_total > 0 {

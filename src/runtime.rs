@@ -8,6 +8,9 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{fs::OpenOptions, io, io::Write, time::Duration};
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
+const CONTENT_HORIZONTAL_PADDING: u16 = 1;
+const SCROLLBAR_WIDTH: u16 = 1;
+
 pub(crate) fn should_handle_key(kind: KeyEventKind) -> bool {
     !matches!(kind, KeyEventKind::Release)
 }
@@ -35,6 +38,7 @@ pub(crate) fn run(
     const FLASH_DURATION: Duration = Duration::from_millis(1500);
     const MOUSE_SCROLL_STEP: usize = 3;
     let mut needs_redraw = true;
+    sync_render_width(terminal, app, ss, themes)?;
 
     loop {
         if needs_redraw {
@@ -164,6 +168,9 @@ pub(crate) fn run(
                             _ => state_changed = false,
                         }
                     }
+                    if sync_render_width(terminal, app, ss, themes)? {
+                        needs_redraw = true;
+                    }
                     if state_changed {
                         needs_redraw = true;
                     }
@@ -188,7 +195,10 @@ pub(crate) fn run(
                         needs_redraw = true;
                     }
                 }
-                Event::Resize(_, _) => needs_redraw = true,
+                Event::Resize(_, _) => {
+                    let _ = sync_render_width(terminal, app, ss, themes)?;
+                    needs_redraw = true;
+                }
                 _ => {}
             }
         }
@@ -212,4 +222,22 @@ pub(crate) fn run(
         }
     }
     Ok(())
+}
+
+fn sync_render_width(
+    terminal: &Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    ss: &SyntaxSet,
+    themes: &ThemeSet,
+) -> Result<bool> {
+    let area = terminal.size()?;
+    let content_width = if app.toc_visible && !app.toc.is_empty() {
+        area.width.saturating_sub(30)
+    } else {
+        area.width
+    };
+    let effective_width = content_width
+        .saturating_sub(CONTENT_HORIZONTAL_PADDING.saturating_mul(2))
+        .saturating_sub(SCROLLBAR_WIDTH);
+    Ok(app.sync_render_width(effective_width as usize, ss, themes))
 }

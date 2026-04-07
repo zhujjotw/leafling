@@ -6,9 +6,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
+
+const CONTENT_HORIZONTAL_PADDING: u16 = 1;
+const SCROLLBAR_WIDTH: u16 = 1;
 
 pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     let area = f.area();
@@ -84,6 +87,11 @@ fn render_toc_panel(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn render_content_panel(f: &mut Frame, app: &mut App, area: Rect, viewport_height: usize) {
     let theme = app_theme();
+    f.render_widget(
+        Paragraph::new("").style(Style::default().bg(theme.ui.content_bg)),
+        area,
+    );
+    let content_area = inner_content_area(area);
     let scroll = app.scroll;
     let active_highlight_line = app.active_highlight_line();
     if let Some(line_idx) = active_highlight_line {
@@ -102,8 +110,10 @@ fn render_content_panel(f: &mut Frame, app: &mut App, area: Rect, viewport_heigh
     }
 
     f.render_widget(
-        Paragraph::new(visible_lines).style(Style::default().bg(theme.ui.content_bg)),
-        area,
+        Paragraph::new(visible_lines)
+            .style(Style::default().bg(theme.ui.content_bg))
+            .wrap(Wrap { trim: false }),
+        content_area,
     );
 
     let mut scrollbar_state = ScrollbarState::new(app.total()).position(app.scroll);
@@ -116,6 +126,18 @@ fn render_content_panel(f: &mut Frame, app: &mut App, area: Rect, viewport_heigh
         area,
         &mut scrollbar_state,
     );
+}
+
+fn inner_content_area(area: Rect) -> Rect {
+    Rect {
+        x: area.x.saturating_add(CONTENT_HORIZONTAL_PADDING),
+        y: area.y,
+        width: area
+            .width
+            .saturating_sub(CONTENT_HORIZONTAL_PADDING.saturating_mul(2))
+            .saturating_sub(SCROLLBAR_WIDTH),
+        height: area.height,
+    }
 }
 
 fn render_status_bar(f: &mut Frame, app: &mut App, area: Rect, viewport_height: usize) {
