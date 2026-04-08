@@ -6,9 +6,37 @@
   Terminal Markdown previewer — GUI-like experience.
 </p>
 
-## Build & install
+## Install
 
-Build the release binary:
+Install the latest published binary:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.sh | sh
+```
+
+Or download then run:
+
+```bash
+curl -fsSL -o install.sh https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.sh
+sh install.sh ~/.local/bin
+```
+
+On Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
+```
+
+Or download then run:
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Destination $HOME\bin
+```
+
+## Build
+
+Build the release binary locally:
 
 ```bash
 cargo build --release
