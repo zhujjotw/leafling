@@ -1,12 +1,16 @@
 use crate::{
     app::App,
-    theme::{app_theme, current_theme_preset, theme_preset_label, THEME_PRESETS},
+    cli::version_text,
+    theme::{app_theme, theme_preset_label, THEME_PRESETS},
 };
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
+    widgets::{
+        Block, Borders, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Wrap,
+    },
     Frame,
 };
 
@@ -38,7 +42,9 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     render_content_panel(f, app, content_area, viewport_height);
     render_status_bar(f, app, root[1], viewport_height);
 
-    if app.is_theme_picker_open() {
+    if app.is_help_open() {
+        render_help_popup(f);
+    } else if app.is_theme_picker_open() {
         render_theme_picker(f, app);
     }
 }
@@ -263,11 +269,14 @@ pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
         &["enter confirm", "esc cancel"]
     } else if app.theme_picker_open {
         &["j/k preview", "enter keep", "esc restore"]
+    } else if app.help_open {
+        &["esc close", "? close"]
     } else if app.has_active_search() {
         &[
             "enter next",
             "n/N next/prev",
             "/ search",
+            "? help",
             "T theme",
             "esc clear",
             "q quit",
@@ -279,19 +288,116 @@ pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
             "t toc",
             "T theme",
             "/ search",
+            "? help",
             "n/N next/prev",
             "q quit",
         ]
     }
 }
 
+fn render_help_popup(f: &mut Frame) {
+    let theme = app_theme();
+    let area = centered_rect(56, 16, f.area());
+    let section_style = Style::default()
+        .fg(theme.ui.toc_primary_active)
+        .add_modifier(Modifier::BOLD);
+    let key_style = Style::default()
+        .fg(theme.ui.toc_accent)
+        .add_modifier(Modifier::BOLD);
+    let text_style = Style::default().fg(theme.ui.toc_primary_inactive);
+    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+    let title_style = Style::default()
+        .fg(theme.markdown.heading_2)
+        .add_modifier(Modifier::BOLD);
+    let lines = vec![
+        Line::from(vec![Span::styled(
+            version_text().to_string(),
+            title_style,
+        )]),
+        Line::from(vec![Span::styled(
+            "Keyboard shortcuts",
+            Style::default().fg(theme.ui.status_shortcut_fg),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Navigation                   Search",
+            section_style,
+        )]),
+        Line::from(vec![
+            Span::styled("j/k, ↑/↓   ", key_style),
+            Span::styled("scroll", text_style),
+            Span::raw("            "),
+            Span::styled("/, Ctrl+F  ", key_style),
+            Span::styled("search", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("PgUp/PgDn  ", key_style),
+            Span::styled("page", text_style),
+            Span::raw("              "),
+            Span::styled("n/N        ", key_style),
+            Span::styled("next/prev", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("g/G        ", key_style),
+            Span::styled("top/bottom", text_style),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Actions",
+            section_style,
+        )]),
+        Line::from(vec![
+            Span::styled("r          ", key_style),
+            Span::styled("reload (watch)", text_style),
+            Span::raw("    "),
+            Span::styled("?          ", key_style),
+            Span::styled("show help", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("t          ", key_style),
+            Span::styled("toggle toc", text_style),
+            Span::raw("        "),
+            Span::styled("q          ", key_style),
+            Span::styled("quit", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("T          ", key_style),
+            Span::styled("theme picker", text_style),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "Esc or ? to close",
+            footer_style,
+        )]),
+    ];
+
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title("─ Help ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.ui.toc_border))
+                .style(Style::default().bg(theme.ui.toc_bg))
+                .padding(Padding::new(1, 1, 0, 0)),
+        ),
+        area,
+    );
+}
+
 fn render_theme_picker(f: &mut Frame, app: &App) {
     let theme = app_theme();
-    let area = centered_rect(34, 9, f.area());
-    let active = current_theme_preset();
-    let current = app.theme_picker_reference_preset();
+    let area = centered_rect(38, 10, f.area());
+    let active = app.theme_picker_reference_preset();
+    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
 
-    let mut lines = Vec::new();
+    let mut lines = vec![
+        Line::from(vec![Span::styled(
+            "Choose a theme",
+            Style::default().fg(theme.ui.status_shortcut_fg),
+        )]),
+        Line::from(""),
+    ];
     for (idx, preset) in THEME_PRESETS.iter().enumerate() {
         let selected = idx == app.theme_picker_index();
         let is_active = *preset == active;
@@ -336,36 +442,20 @@ fn render_theme_picker(f: &mut Frame, app: &App) {
         ]));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::styled(
-            " Current: ",
-            Style::default()
-                .fg(theme.ui.status_shortcut_fg)
-                .bg(theme.ui.toc_bg),
-        ),
-        Span::styled(
-            theme_preset_label(current).to_string(),
-            Style::default()
-                .fg(theme.ui.toc_accent)
-                .bg(theme.ui.toc_bg)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]));
     lines.push(Line::from(vec![Span::styled(
-        " Enter keep • Esc restore ",
-        Style::default()
-            .fg(theme.ui.status_shortcut_fg)
-            .bg(theme.ui.toc_bg),
+        "Enter keep • Esc restore",
+        footer_style.bg(theme.ui.toc_bg),
     )]));
 
     f.render_widget(Clear, area);
     f.render_widget(
         Paragraph::new(lines).block(
             Block::default()
-                .title(" Theme ")
+                .title("─ Theme ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.ui.toc_border))
-                .style(Style::default().bg(theme.ui.toc_bg)),
+                .style(Style::default().bg(theme.ui.toc_bg))
+                .padding(Padding::new(1, 1, 0, 0)),
         ),
         area,
     );

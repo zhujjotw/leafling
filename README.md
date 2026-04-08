@@ -91,8 +91,9 @@ cat TESTING.md | leaf
 | `G` / End | Bottom |
 | `t` | Toggle TOC sidebar |
 | `T` | Open theme picker |
+| `?` | Show help popup |
 | `1`–`9` | Jump to TOC section N |
-| `/` | Search |
+| `/` / `Ctrl+F` | Search |
 | `n` / `N` | Next / prev match |
 | `r` | Force reload (watch mode) |
 | `q` | Quit |

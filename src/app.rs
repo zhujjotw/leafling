@@ -81,6 +81,7 @@ pub(crate) struct App {
     pub(crate) toc_active_idx: Option<usize>,
     pub(crate) status_line: Line<'static>,
     pub(crate) status_cache_key: Option<StatusCacheKey>,
+    pub(crate) help_open: bool,
     pub(crate) theme_picker_open: bool,
     pub(crate) theme_picker_index: usize,
     pub(crate) theme_picker_original: Option<ThemePreset>,
@@ -160,6 +161,7 @@ impl App {
             toc_active_idx: None,
             status_line: Line::default(),
             status_cache_key: None,
+            help_open: false,
             theme_picker_open: false,
             theme_picker_index: theme_preset_index(current_theme_preset()),
             theme_picker_original: None,
@@ -353,6 +355,18 @@ impl App {
 
     pub(crate) fn is_theme_picker_open(&self) -> bool {
         self.theme_picker_open
+    }
+
+    pub(crate) fn open_help(&mut self) {
+        self.help_open = true;
+    }
+
+    pub(crate) fn close_help(&mut self) {
+        self.help_open = false;
+    }
+
+    pub(crate) fn is_help_open(&self) -> bool {
+        self.help_open
     }
 
     pub(crate) fn theme_picker_index(&self) -> usize {

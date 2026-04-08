@@ -81,7 +81,12 @@ pub(crate) fn run(
                         continue;
                     }
                     let mut state_changed = true;
-                    if app.is_theme_picker_open() {
+                    if app.is_help_open() {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('?') => app.close_help(),
+                            _ => state_changed = false,
+                        }
+                    } else if app.is_theme_picker_open() {
                         match key.code {
                             KeyCode::Esc => {
                                 app.restore_theme_picker_preview(ss, themes);
@@ -153,9 +158,17 @@ pub(crate) fn run(
                             KeyCode::Char('T') => {
                                 app.open_theme_picker();
                             }
+                            KeyCode::Char('?') => {
+                                app.open_help();
+                            }
                             KeyCode::Char('r') if app.watch => {
                                 app.last_file_state = None;
                                 app.reload(ss, themes);
+                            }
+                            KeyCode::Char('f')
+                                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                            {
+                                app.begin_search()
                             }
                             KeyCode::Char('/') => app.begin_search(),
                             KeyCode::Char('n') => app.next_match(),
