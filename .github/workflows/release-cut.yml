@@ -22,7 +22,7 @@ permissions:
   contents: write
 
 jobs:
-  cut-release:
+  release-cut:
     runs-on: ubuntu-latest
 
     steps:
