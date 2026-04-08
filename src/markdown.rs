@@ -329,30 +329,42 @@ fn list_item_prefix(
     prefix
 }
 
-fn push_wrapped_blockquote_lines(
+fn push_wrapped_prefixed_lines(
     lines: &mut Vec<Line<'static>>,
     body_spans: &mut Vec<Span<'static>>,
+    first_prefix: Vec<Span<'static>>,
+    continuation_prefix: Vec<Span<'static>>,
     render_width: usize,
 ) {
     if body_spans.is_empty() {
         return;
     }
 
-    let prefix = block_prefix(true);
-    let prefix_width: usize = prefix.iter().map(|span| display_width(span.content.as_ref())).sum();
-    let max_width = render_width.saturating_sub(prefix_width).max(8);
+    let first_prefix_width: usize = first_prefix
+        .iter()
+        .map(|span| display_width(span.content.as_ref()))
+        .sum();
+    let continuation_prefix_width: usize = continuation_prefix
+        .iter()
+        .map(|span| display_width(span.content.as_ref()))
+        .sum();
+    let max_width = render_width
+        .saturating_sub(first_prefix_width.max(continuation_prefix_width))
+        .max(8);
 
-    let mut current_prefix = prefix.clone();
+    let mut current_prefix = first_prefix.clone();
+    let mut next_prefix = continuation_prefix.clone();
     let mut current_width = 0usize;
     let mut body_started = false;
 
     let push_current = |lines: &mut Vec<Line<'static>>,
                         current_prefix: &mut Vec<Span<'static>>,
+                        next_prefix: &mut Vec<Span<'static>>,
                         body_started: &mut bool,
                         current_width: &mut usize| {
         if *body_started {
             lines.push(Line::from(std::mem::take(current_prefix)));
-            *current_prefix = prefix.clone();
+            *current_prefix = next_prefix.clone();
             *body_started = false;
             *current_width = 0;
         }
@@ -363,12 +375,12 @@ fn push_wrapped_blockquote_lines(
         let mut token = String::new();
         let mut token_is_space = false;
 
-        let flush_token = |token: &mut String,
-                           token_is_space: bool,
-                           lines: &mut Vec<Line<'static>>,
-                           current_prefix: &mut Vec<Span<'static>>,
-                           body_started: &mut bool,
-                           current_width: &mut usize| {
+        let mut flush_token = |token: &mut String,
+                               token_is_space: bool,
+                               lines: &mut Vec<Line<'static>>,
+                               current_prefix: &mut Vec<Span<'static>>,
+                               body_started: &mut bool,
+                               current_width: &mut usize| {
             if token.is_empty() {
                 return;
             }
@@ -385,7 +397,13 @@ fn push_wrapped_blockquote_lines(
             }
 
             if *body_started && *current_width + token_width > max_width {
-                push_current(lines, current_prefix, body_started, current_width);
+                push_current(
+                    lines,
+                    current_prefix,
+                    &mut next_prefix,
+                    body_started,
+                    current_width,
+                );
             }
 
             if token_width <= max_width {
@@ -409,7 +427,13 @@ fn push_wrapped_blockquote_lines(
                         current_prefix.push(Span::styled(std::mem::take(&mut chunk), style));
                         *body_started = true;
                     }
-                    push_current(lines, current_prefix, body_started, current_width);
+                    push_current(
+                        lines,
+                        current_prefix,
+                        &mut next_prefix,
+                        body_started,
+                        current_width,
+                    );
                     chunk_width = 0;
                 }
 
@@ -456,6 +480,15 @@ fn push_wrapped_blockquote_lines(
     if body_started {
         lines.push(Line::from(current_prefix));
     }
+}
+
+fn push_wrapped_blockquote_lines(
+    lines: &mut Vec<Line<'static>>,
+    body_spans: &mut Vec<Span<'static>>,
+    render_width: usize,
+) {
+    let prefix = block_prefix(true);
+    push_wrapped_prefixed_lines(lines, body_spans, prefix.clone(), prefix, render_width);
 }
 
 impl TableBuf {
@@ -907,13 +940,20 @@ pub(crate) fn parse_markdown_with_width(
             MdEvent::End(TagEnd::Paragraph) => {
                 if blockquote_depth > 0 && item_stack.is_empty() {
                     push_wrapped_blockquote_lines(&mut lines, &mut spans, render_width);
+                } else if !item_stack.is_empty() {
+                    let first_prefix =
+                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
+                    let continuation_prefix =
+                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
+                    push_wrapped_prefixed_lines(
+                        &mut lines,
+                        &mut spans,
+                        first_prefix,
+                        continuation_prefix,
+                        render_width,
+                    );
                 } else {
-                    let prefix = if item_stack.is_empty() {
-                        block_prefix(false)
-                    } else {
-                        list_item_prefix(false, &list_stack, &mut item_stack)
-                    };
-                    flush!(prefix);
+                    flush!(block_prefix(false));
                 }
                 lines.push(Line::from(""));
                 last_block = LastBlock::Paragraph;
@@ -1016,10 +1056,17 @@ pub(crate) fn parse_markdown_with_width(
             }
             MdEvent::End(TagEnd::Item) => {
                 if !spans.is_empty() {
-                    let mut all =
+                    let first_prefix =
                         list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
-                    all.append(&mut spans);
-                    lines.push(Line::from(all));
+                    let continuation_prefix =
+                        list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
+                    push_wrapped_prefixed_lines(
+                        &mut lines,
+                        &mut spans,
+                        first_prefix,
+                        continuation_prefix,
+                        render_width,
+                    );
                 }
                 item_stack.pop();
                 if let Some(ListKind::Ordered(next)) = list_stack.last_mut() {
@@ -1080,13 +1127,20 @@ pub(crate) fn parse_markdown_with_width(
                 if !in_code {
                     if blockquote_depth > 0 && item_stack.is_empty() {
                         push_wrapped_blockquote_lines(&mut lines, &mut spans, render_width);
+                    } else if !item_stack.is_empty() {
+                        let first_prefix =
+                            list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
+                        let continuation_prefix =
+                            list_item_prefix(blockquote_depth > 0, &list_stack, &mut item_stack);
+                        push_wrapped_prefixed_lines(
+                            &mut lines,
+                            &mut spans,
+                            first_prefix,
+                            continuation_prefix,
+                            render_width,
+                        );
                     } else {
-                        let prefix = if item_stack.is_empty() {
-                            block_prefix(false)
-                        } else {
-                            list_item_prefix(false, &list_stack, &mut item_stack)
-                        };
-                        flush!(prefix);
+                        flush!(block_prefix(false));
                     }
                 }
             }

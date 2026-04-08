@@ -378,6 +378,23 @@ fn paragraph_and_following_list_have_no_blank_gap() {
 }
 
 #[test]
+fn wrapped_list_items_align_continuation_under_text() {
+    let (ss, theme) = test_assets();
+    let src = "- First item with enough text to wrap when the terminal is narrow and show continuation alignment.\n8. Eighth item with enough text to wrap and keep numeric alignment readable.\n";
+    let (lines, _) = parse_markdown_with_width(src, &ss, &theme, 36);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(rendered.iter().any(|line| line.starts_with("• First item")));
+    assert!(rendered
+        .iter()
+        .any(|line| line.starts_with("  ") && line.contains("terminal is narrow")));
+    assert!(rendered.iter().any(|line| line.starts_with("8. Eighth item")));
+    assert!(rendered
+        .iter()
+        .any(|line| line.starts_with("   ") && !line.starts_with("8. ")));
+}
+
+#[test]
 fn paragraph_and_following_code_block_have_no_blank_gap() {
     let (ss, theme) = test_assets();
     let src = "Intro paragraph\n\n```rs\nfn main() {}\n```\n";
