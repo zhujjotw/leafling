@@ -1,0 +1,65 @@
+name: Release Cut
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump type
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      branch:
+        description: Branch to release from
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  cut-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require release push token
+        env:
+          WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+        run: |
+          if [ -z "$WORKFLOW_TOKEN" ]; then
+            echo "Missing secret WORKFLOW_TOKEN" >&2
+            echo "Create this secret so the pushed tag can trigger Release Build." >&2
+            exit 1
+          fi
+
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure git author
+        run: |
+          git config user.name "RivoLink"
+          git config user.email "rivo.link@gmail.com"
+
+      - name: Validate release candidate
+        run: |
+          cargo test
+          cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Restore clean working tree
+        run: |
+          git reset --hard HEAD
+          git clean -fd
+
+      - name: Cut release
+        run: ./scripts/release-cut.sh "${{ inputs.bump }}" "${{ inputs.branch }}"
