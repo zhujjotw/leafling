@@ -31,7 +31,7 @@ Or download then run:
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -Destination $HOME\bin
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Destination $env:LOCALAPPDATA\Programs\leaf
 ```
 
 ## Build
