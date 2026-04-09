@@ -4,7 +4,11 @@ use crate::markdown::{parse_markdown, parse_markdown_with_width};
 use crossterm::event::KeyEventKind;
 use ratatui::backend::TestBackend;
 use ratatui::{text::Line, widgets::Paragraph, Terminal};
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    fs,
+    sync::{Mutex, MutexGuard},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use syntect::{
     highlighting::{Theme, ThemeSet},
     parsing::SyntaxSet,
@@ -622,4 +626,47 @@ fn theme_picker_caches_previewed_themes_for_reuse() {
     assert_eq!(current_theme_preset(), ThemePreset::OceanDark);
     assert!(app.theme_preview_cache[theme_preset_index(ThemePreset::OceanDark)].is_some());
     set_theme_preset(original);
+}
+
+#[test]
+fn file_picker_lists_dirs_then_markdown_files_only() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("leaf-picker-test-{unique}"));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("notes")).unwrap();
+    fs::write(root.join("README.md"), "# Demo\n").unwrap();
+    fs::write(root.join("draft.markdown"), "# Draft\n").unwrap();
+    fs::write(root.join("ignore.txt"), "nope\n").unwrap();
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        "picker".to_string(),
+        String::new(),
+        false,
+        false,
+        None,
+        None,
+    );
+
+    assert!(app.open_file_picker(root.clone()));
+
+    let labels: Vec<_> = app
+        .file_picker_entries
+        .iter()
+        .map(|entry| entry.label.as_str())
+        .collect();
+    assert!(labels.contains(&"notes/"));
+    assert!(labels.contains(&"README.md"));
+    assert!(labels.contains(&"draft.markdown"));
+    assert!(!labels.contains(&"ignore.txt"));
+
+    let notes_idx = labels.iter().position(|label| *label == "notes/").unwrap();
+    let readme_idx = labels.iter().position(|label| *label == "README.md").unwrap();
+    assert!(notes_idx < readme_idx);
+
+    let _ = fs::remove_dir_all(root);
 }

@@ -10,6 +10,7 @@ use crate::{
 };
 use ratatui::text::Line;
 use std::{
+    fs,
     path::PathBuf,
     time::{Duration, Instant, SystemTime},
 };
@@ -54,6 +55,13 @@ pub(crate) struct ThemePreviewCacheEntry {
     pub(crate) toc: Vec<TocEntry>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FilePickerEntry {
+    pub(crate) label: String,
+    pub(crate) path: PathBuf,
+    pub(crate) is_dir: bool,
+}
+
 pub(crate) struct App {
     pub(crate) lines: Vec<Line<'static>>,
     pub(crate) plain_lines: Vec<String>,
@@ -82,6 +90,10 @@ pub(crate) struct App {
     pub(crate) status_line: Line<'static>,
     pub(crate) status_cache_key: Option<StatusCacheKey>,
     pub(crate) help_open: bool,
+    pub(crate) file_picker_open: bool,
+    pub(crate) file_picker_dir: PathBuf,
+    pub(crate) file_picker_entries: Vec<FilePickerEntry>,
+    pub(crate) file_picker_index: usize,
     pub(crate) theme_picker_open: bool,
     pub(crate) theme_picker_index: usize,
     pub(crate) theme_picker_original: Option<ThemePreset>,
@@ -90,6 +102,57 @@ pub(crate) struct App {
 }
 
 impl App {
+    fn is_markdown_path(path: &std::path::Path) -> bool {
+        matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("md" | "markdown" | "mdown" | "mkd")
+        )
+    }
+
+    fn build_file_picker_entries(dir: &std::path::Path) -> std::io::Result<Vec<FilePickerEntry>> {
+        let mut entries = Vec::new();
+
+        if let Some(parent) = dir.parent() {
+            entries.push(FilePickerEntry {
+                label: "..".to_string(),
+                path: parent.to_path_buf(),
+                is_dir: true,
+            });
+        }
+
+        let mut dirs = Vec::new();
+        let mut files = Vec::new();
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(_) => continue,
+            };
+            let name = entry.file_name().to_string_lossy().to_string();
+
+            if file_type.is_dir() {
+                dirs.push(FilePickerEntry {
+                    label: format!("{name}/"),
+                    path,
+                    is_dir: true,
+                });
+            } else if file_type.is_file() && Self::is_markdown_path(&path) {
+                files.push(FilePickerEntry {
+                    label: name,
+                    path,
+                    is_dir: false,
+                });
+            }
+        }
+
+        dirs.sort_by_key(|entry| entry.label.to_lowercase());
+        files.sort_by_key(|entry| entry.label.to_lowercase());
+        entries.extend(dirs);
+        entries.extend(files);
+        Ok(entries)
+    }
+
     #[cfg(test)]
     pub(crate) fn new(
         lines: Vec<Line<'static>>,
@@ -162,6 +225,10 @@ impl App {
             status_line: Line::default(),
             status_cache_key: None,
             help_open: false,
+            file_picker_open: false,
+            file_picker_dir: PathBuf::from("."),
+            file_picker_entries: Vec::new(),
+            file_picker_index: 0,
             theme_picker_open: false,
             theme_picker_index: theme_preset_index(current_theme_preset()),
             theme_picker_original: None,
@@ -367,6 +434,50 @@ impl App {
 
     pub(crate) fn is_help_open(&self) -> bool {
         self.help_open
+    }
+
+    pub(crate) fn open_file_picker(&mut self, dir: PathBuf) -> bool {
+        match Self::build_file_picker_entries(&dir) {
+            Ok(entries) => {
+                self.file_picker_open = true;
+                self.file_picker_dir = dir;
+                self.file_picker_entries = entries;
+                self.file_picker_index = 0;
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    pub(crate) fn is_file_picker_open(&self) -> bool {
+        self.file_picker_open
+    }
+
+    pub(crate) fn move_file_picker_up(&mut self) {
+        let total = self.file_picker_entries.len();
+        if total == 0 {
+            return;
+        }
+        if self.file_picker_index == 0 {
+            self.file_picker_index = total - 1;
+        } else {
+            self.file_picker_index -= 1;
+        }
+    }
+
+    pub(crate) fn move_file_picker_down(&mut self) {
+        let total = self.file_picker_entries.len();
+        if total == 0 {
+            return;
+        }
+        self.file_picker_index = (self.file_picker_index + 1) % total;
+    }
+
+    pub(crate) fn open_file_picker_parent(&mut self) -> bool {
+        let Some(parent) = self.file_picker_dir.parent() else {
+            return false;
+        };
+        self.open_file_picker(parent.to_path_buf())
     }
 
     pub(crate) fn theme_picker_index(&self) -> usize {
@@ -629,6 +740,54 @@ impl App {
         self.replace_content(new_lines, new_toc);
         if !self.search_query.is_empty() && !self.search_mode {
             self.run_search();
+        }
+    }
+
+    pub(crate) fn load_path(&mut self, path: PathBuf, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
+        let src = match std::fs::read_to_string(&path) {
+            Ok(src) => src,
+            Err(_) => return false,
+        };
+        let filename = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        let file_state = read_file_state(&path);
+        let content_hash = hash_str(&src);
+        let theme = current_syntect_theme(themes);
+        let (lines, toc) = parse_markdown_with_width(&src, ss, theme, self.render_width);
+
+        self.filename = filename;
+        self.source = src;
+        self.filepath = Some(path);
+        self.last_file_state = file_state;
+        self.last_content_hash = content_hash;
+        self.last_hash_check = Some(Instant::now());
+        self.reload_flash = None;
+        self.scroll = 0;
+        self.help_open = false;
+        self.file_picker_open = false;
+        self.theme_picker_open = false;
+        self.search_mode = false;
+        self.reset_search_state();
+        self.invalidate_theme_preview_cache();
+        self.store_theme_preview(current_theme_preset(), &lines, &toc);
+        self.replace_content(lines, toc);
+        true
+    }
+
+    pub(crate) fn activate_file_picker_selection(
+        &mut self,
+        ss: &SyntaxSet,
+        themes: &ThemeSet,
+    ) -> bool {
+        let Some(entry) = self.file_picker_entries.get(self.file_picker_index).cloned() else {
+            return false;
+        };
+        if entry.is_dir {
+            self.open_file_picker(entry.path)
+        } else {
+            self.load_path(entry.path, ss, themes)
         }
     }
 
