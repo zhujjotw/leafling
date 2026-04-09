@@ -86,6 +86,20 @@ pub(crate) fn run(
                             KeyCode::Esc | KeyCode::Char('?') => app.close_help(),
                             _ => state_changed = false,
                         }
+                    } else if app.is_file_picker_open() {
+                        match key.code {
+                            KeyCode::Char('q') => break,
+                            KeyCode::Char('?') => app.open_help(),
+                            KeyCode::Enter => {
+                                state_changed = app.activate_file_picker_selection(ss, themes);
+                            }
+                            KeyCode::Char('j') | KeyCode::Down => app.move_file_picker_down(),
+                            KeyCode::Char('k') | KeyCode::Up => app.move_file_picker_up(),
+                            KeyCode::Backspace | KeyCode::Char('h') | KeyCode::Left => {
+                                state_changed = app.open_file_picker_parent();
+                            }
+                            _ => state_changed = false,
+                        }
                     } else if app.is_theme_picker_open() {
                         match key.code {
                             KeyCode::Esc => {
@@ -189,7 +203,7 @@ pub(crate) fn run(
                     }
                 }
                 Event::Mouse(mouse) => {
-                    let state_changed = if app.is_theme_picker_open() {
+                    let state_changed = if app.is_file_picker_open() || app.is_theme_picker_open() {
                         false
                     } else {
                         match mouse.kind {

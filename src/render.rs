@@ -44,6 +44,8 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
 
     if app.is_help_open() {
         render_help_popup(f);
+    } else if app.is_file_picker_open() {
+        render_file_picker(f, app);
     } else if app.is_theme_picker_open() {
         render_theme_picker(f, app);
     }
@@ -267,6 +269,8 @@ pub(crate) fn status_search_section(app: &App) -> Option<Vec<Span<'static>>> {
 pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
     if app.search_mode {
         &["enter confirm", "esc cancel"]
+    } else if app.file_picker_open {
+        &["j/k move", "enter open", "backspace up", "q quit"]
     } else if app.theme_picker_open {
         &["j/k preview", "enter keep", "esc restore"]
     } else if app.help_open {
@@ -461,6 +465,101 @@ fn render_theme_picker(f: &mut Frame, app: &App) {
     );
 }
 
+fn render_file_picker(f: &mut Frame, app: &App) {
+    let theme = app_theme();
+    let area = centered_rect(70, 18, f.area());
+    let title_style = Style::default()
+        .fg(theme.markdown.heading_2)
+        .add_modifier(Modifier::BOLD);
+    let section_style = Style::default().fg(theme.ui.status_shortcut_fg);
+    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let visible_slots = inner_height.saturating_sub(5);
+    let total = app.file_picker_entries.len();
+    let start = if visible_slots == 0 || app.file_picker_index < visible_slots {
+        0
+    } else {
+        app.file_picker_index + 1 - visible_slots
+    };
+    let end = (start + visible_slots).min(total);
+
+    let mut lines = vec![
+        Line::from(vec![Span::styled("Open a Markdown file", title_style)]),
+        Line::from(vec![Span::styled(
+            app.file_picker_dir.display().to_string(),
+            section_style,
+        )]),
+        Line::from(""),
+    ];
+
+    if total == 0 {
+        lines.push(Line::from(vec![Span::styled(
+            "No folders or Markdown files here",
+            Style::default().fg(theme.ui.toc_primary_inactive),
+        )]));
+    } else {
+        for (idx, entry) in app.file_picker_entries[start..end].iter().enumerate() {
+            let actual_idx = start + idx;
+            let selected = actual_idx == app.file_picker_index;
+            let bg = if selected {
+                theme.ui.toc_active_bg
+            } else {
+                theme.ui.toc_bg
+            };
+            let marker = if selected { "▸ " } else { "  " };
+            lines.push(Line::from(vec![
+                Span::styled(
+                    marker,
+                    Style::default()
+                        .fg(theme.ui.toc_accent)
+                        .bg(bg)
+                        .add_modifier(if selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ),
+                Span::styled(
+                    entry.label.clone(),
+                    Style::default()
+                        .fg(if entry.is_dir {
+                            theme.ui.toc_primary_active
+                        } else {
+                            theme.ui.toc_primary_inactive
+                        })
+                        .bg(bg)
+                        .add_modifier(if selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ),
+            ]));
+        }
+    }
+
+    while lines.len() < inner_height.saturating_sub(1) {
+        lines.push(Line::from(""));
+    }
+    lines.push(Line::from(vec![Span::styled(
+        "Enter open • Backspace up • q quit",
+        footer_style.bg(theme.ui.toc_bg),
+    )]));
+
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title("─ Files ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.ui.toc_border))
+                .style(Style::default().bg(theme.ui.toc_bg))
+                .padding(Padding::new(1, 1, 0, 0)),
+        ),
+        area,
+    );
+}
+
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let popup_width = width.min(area.width.saturating_sub(2)).max(1);
     let popup_height = height.min(area.height.saturating_sub(2)).max(1);
@@ -510,11 +609,10 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
         left_section.extend(section);
     }
 
-    let sections = vec![
-        left_section,
-        status_shortcuts_section(app, bar_bg),
-        status_percent_section(pct, bar_bg),
-    ];
+    let mut sections = vec![left_section, status_shortcuts_section(app, bar_bg)];
+    if !app.is_file_picker_open() {
+        sections.push(status_percent_section(pct, bar_bg));
+    }
 
     join_span_sections(sections, outer_separator)
 }

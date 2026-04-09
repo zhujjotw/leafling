@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{fs::OpenOptions, io, io::Read, io::Write, path::PathBuf};
+use std::{fs::OpenOptions, io, io::IsTerminal, io::Read, io::Write, path::PathBuf};
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 mod app;
@@ -62,6 +62,7 @@ fn main() -> Result<()> {
         writeln!(file, "leaf debug input log").ok();
     }
 
+    let mut open_picker_dir = None;
     let (src, filename, filepath) = if let Some(f) = file_arg {
         let path = PathBuf::from(&f);
         let content = std::fs::read_to_string(&path)
@@ -72,19 +73,25 @@ fn main() -> Result<()> {
             .unwrap_or(f.clone());
         (content, name, Some(path))
     } else {
-        if watch {
-            eprintln!("Error: --watch requires a file path (stdin cannot be watched)");
-            std::process::exit(1);
+        if io::stdin().is_terminal() {
+            let cwd = std::env::current_dir().context("Cannot read current directory")?;
+            let label = cwd
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| cwd.display().to_string());
+            open_picker_dir = Some(cwd);
+            (String::new(), label, None)
+        } else {
+            if watch {
+                eprintln!("Error: --watch requires a file path (stdin cannot be watched)");
+                std::process::exit(1);
+            }
+            let mut buf = String::new();
+            io::stdin()
+                .read_to_string(&mut buf)
+                .context("Cannot read stdin")?;
+            (buf, "stdin".to_string(), None)
         }
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .context("Cannot read stdin")?;
-        if buf.is_empty() {
-            print_usage();
-            std::process::exit(1);
-        }
-        (buf, "stdin".to_string(), None)
     };
 
     let ss = SyntaxSet::load_defaults_newlines();
@@ -106,6 +113,9 @@ fn main() -> Result<()> {
         last_file_state,
     );
     app.set_last_content_hash(last_content_hash);
+    if let Some(dir) = open_picker_dir {
+        app.open_file_picker(dir);
+    }
 
     let mut stdout = io::stdout();
     let mut session = TerminalSession::enter(&mut stdout)?;
