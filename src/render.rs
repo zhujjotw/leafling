@@ -238,7 +238,7 @@ pub(crate) fn status_search_section(app: &App) -> Option<Vec<Span<'static>>> {
     let theme = app_theme();
     if app.is_search_mode() {
         return Some(vec![Span::styled(
-            format!(" /{}", app.search_draft()),
+            format!(" /{} ", app.search_draft()),
             Style::default()
                 .fg(theme.ui.status_search_fg)
                 .bg(theme.ui.status_search_bg),

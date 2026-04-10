@@ -272,6 +272,25 @@ fn table_render_right_border_stays_aligned() {
 }
 
 #[test]
+fn table_render_right_border_stays_aligned_with_emoji_cells() {
+    let (ss, theme) = test_assets();
+    let md = "| Critère | Note |\n| --- | --- |\n| Tests | ✅ Bonne couverture |\n| Sécurité | ⚠ Quelques points |\n";
+    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let buffer = render_buffer(&lines);
+
+    let (right_x, start_y) = find_symbol(&buffer, "┐").unwrap();
+    let (_, end_y) = find_symbol(&buffer, "┘").unwrap();
+
+    for y in start_y + 1..end_y {
+        let symbol = buffer.cell((right_x, y)).unwrap().symbol();
+        assert!(
+            matches!(symbol, "│" | "┤" | "╡"),
+            "unexpected emoji-table edge symbol {symbol:?} at row {y}"
+        );
+    }
+}
+
+#[test]
 fn narrow_tables_fit_render_width_and_wrap_cells() {
     let (ss, theme) = test_assets();
     let md = "| Column | Description | Value |\n| --- | --- | ---: |\n| Width | Terminal-dependent layout behavior | 80 |\n";
@@ -858,4 +877,49 @@ fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
     assert!(app.sync_render_width(10, &ss, &ts));
     assert!(!app.sync_render_width(10, &ss, &ts));
     assert_eq!(app.total(), parse_markdown_with_width(source, &ss, &theme, 20).0.len());
+}
+
+#[test]
+fn wrapped_list_inline_code_keeps_left_padding_in_rendered_line() {
+    let (ss, theme) = test_assets();
+    let source = "- `leaf --theme ocean README.md` exercises wrapping inside a list item.\n";
+    let (lines, _) = parse_markdown_with_width(source, &ss, &theme, 22);
+
+    let target = lines
+        .iter()
+        .find(|line| line_plain_text(line).contains("leaf --theme"))
+        .expect("expected wrapped inline-code line");
+
+    assert!(
+        target
+            .spans
+            .iter()
+            .any(|span| span.style.bg.is_some() && span.content.starts_with(' ')),
+        "expected a background-styled span with left padding"
+    );
+}
+
+#[test]
+fn code_block_inside_list_item_is_indented_and_has_no_blank_gap_before() {
+    let (ss, theme) = test_assets();
+    let md = "To put a code block within a list item, the code block needs\nto be indented *twice* -- 8 spaces or two tabs:\n\n*   A list item with a code block:\n\n        <code goes here>\n";
+    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    let item_idx = rendered
+        .iter()
+        .position(|line| line.contains("A list item with a code block:"))
+        .expect("missing list item line");
+    let header_idx = rendered
+        .iter()
+        .position(|line| line.contains("┌─ text"))
+        .expect("missing code block header");
+    let code_idx = rendered
+        .iter()
+        .position(|line| line.contains("<code goes here>"))
+        .expect("missing code line");
+
+    assert_eq!(header_idx, item_idx + 1, "expected no blank gap before code block");
+    assert!(rendered[header_idx].starts_with("  "));
+    assert!(rendered[code_idx].starts_with("  "));
 }

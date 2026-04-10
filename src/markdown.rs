@@ -62,6 +62,15 @@ struct TableBorder<'a> {
     right: &'a str,
 }
 
+struct CodeBlockRenderContext<'a> {
+    ss: &'a SyntaxSet,
+    theme: &'a Theme,
+    render_width: usize,
+    theme_colors: &'a MarkdownTheme,
+    blockquote_depth: usize,
+    list_stack: &'a [ListKind],
+}
+
 pub(crate) fn line_plain_text(line: &Line<'_>) -> String {
     line.spans.iter().map(|s| s.content.as_ref()).collect()
 }
@@ -112,27 +121,31 @@ pub(crate) fn truncate_display_width(text: &str, max_width: usize) -> String {
 
 pub(crate) fn display_width(text: &str) -> usize {
     let mut width = 0;
-    for ch in text.chars() {
-        if ch == '\t' {
+    let mut parts = text.split('\t').peekable();
+    while let Some(segment) = parts.next() {
+        width += UnicodeWidthStr::width(segment);
+        if parts.peek().is_some() {
             width += TAB_STOP - (width % TAB_STOP);
-        } else {
-            width += UnicodeWidthChar::width(ch).unwrap_or(0);
         }
     }
     width
 }
 
 fn expand_tabs(text: &str, start_width: usize) -> String {
+    if !text.contains('\t') {
+        return text.to_string();
+    }
+
     let mut out = String::new();
     let mut width = start_width;
-    for ch in text.chars() {
-        if ch == '\t' {
+    let mut parts = text.split('\t').peekable();
+    while let Some(segment) = parts.next() {
+        out.push_str(segment);
+        width += UnicodeWidthStr::width(segment);
+        if parts.peek().is_some() {
             let spaces = TAB_STOP - (width % TAB_STOP);
             out.push_str(&" ".repeat(spaces));
             width += spaces;
-        } else {
-            out.push(ch);
-            width += UnicodeWidthChar::width(ch).unwrap_or(0);
         }
     }
     out
@@ -405,9 +418,12 @@ fn push_wrapped_prefixed_lines(
 
             let token_width = display_width(token);
             if token_is_space {
-                if *body_started && *current_width + token_width <= max_width {
+                let keep_styled_padding = style.bg.is_some();
+                if (*body_started || keep_styled_padding) && *current_width + token_width <= max_width
+                {
                     current_prefix.push(Span::styled(std::mem::take(token), style));
                     *current_width += token_width;
+                    *body_started = true;
                 } else {
                     token.clear();
                 }
@@ -539,10 +555,8 @@ fn flush_wrapped_spans(
 fn trim_paragraph_gap_before_block(
     lines: &mut Vec<Line<'static>>,
     last_block: LastBlock,
-    item_stack: &[ItemState],
 ) {
     if last_block == LastBlock::Paragraph
-        && item_stack.is_empty()
         && lines.last().is_some_and(|line| line_plain_text(line).is_empty())
     {
         lines.pop();
@@ -598,38 +612,57 @@ fn push_code_block_lines(
     lines: &mut Vec<Line<'static>>,
     code_buf: &mut String,
     code_lang: &mut String,
-    ss: &SyntaxSet,
-    theme: &Theme,
-    render_width: usize,
-    theme_colors: &MarkdownTheme,
+    ctx: CodeBlockRenderContext<'_>,
+    item_stack: &mut [ItemState],
 ) {
+    let prefix = if !item_stack.is_empty() {
+        list_item_prefix(ctx.blockquote_depth > 0, ctx.list_stack, item_stack)
+    } else if ctx.blockquote_depth > 0 {
+        block_prefix(true)
+    } else {
+        Vec::new()
+    };
+    let prefix_width: usize = prefix
+        .iter()
+        .map(|span| display_width(span.content.as_ref()))
+        .sum();
     let label = if code_lang.is_empty() {
         "text".to_string()
     } else {
         code_lang.clone()
     };
-    let (code_lines, inner_width) = highlight_code(code_buf, code_lang, ss, theme, render_width);
+    let available_width = ctx.render_width.saturating_sub(prefix_width);
+    let (code_lines, inner_width) =
+        highlight_code(code_buf, code_lang, ctx.ss, ctx.theme, available_width);
     let header_width = UnicodeWidthStr::width(label.as_str()) + 3;
     let top_bar = "─".repeat(inner_width.saturating_sub(header_width));
-    lines.push(Line::from(vec![
+    let mut header = prefix.clone();
+    header.extend([
         Span::styled(
             "┌─ ".to_string(),
-            Style::default().fg(theme_colors.code_frame),
+            Style::default().fg(ctx.theme_colors.code_frame),
         ),
         Span::styled(
             format!("{label} "),
-            Style::default().fg(theme_colors.code_label),
+            Style::default().fg(ctx.theme_colors.code_label),
         ),
         Span::styled(
             format!("{top_bar}┐"),
-            Style::default().fg(theme_colors.code_frame),
+            Style::default().fg(ctx.theme_colors.code_frame),
         ),
-    ]));
-    lines.extend(code_lines);
-    lines.push(Line::from(Span::styled(
+    ]);
+    lines.push(Line::from(header));
+    lines.extend(code_lines.into_iter().map(|line| {
+        let mut spans = prefix.clone();
+        spans.extend(line.spans);
+        Line::from(spans)
+    }));
+    let mut footer = prefix;
+    footer.push(Span::styled(
         format!("└{}┘", "─".repeat(inner_width)),
-        Style::default().fg(theme_colors.code_frame),
-    )));
+        Style::default().fg(ctx.theme_colors.code_frame),
+    ));
+    lines.push(Line::from(footer));
     lines.push(Line::from(""));
     code_lang.clear();
     code_buf.clear();
@@ -740,11 +773,10 @@ fn handle_table_event(
 fn start_list(
     lines: &mut Vec<Line<'static>>,
     last_block: LastBlock,
-    item_stack: &[ItemState],
     list_stack: &mut Vec<ListKind>,
     start: Option<u64>,
 ) {
-    trim_paragraph_gap_before_block(lines, last_block, item_stack);
+    trim_paragraph_gap_before_block(lines, last_block);
     list_stack.push(match start {
         Some(n) => ListKind::Ordered(n),
         None => ListKind::Unordered,
@@ -909,13 +941,12 @@ fn end_heading(
 fn start_code_block(
     lines: &mut Vec<Line<'static>>,
     last_block: LastBlock,
-    item_stack: &[ItemState],
     in_code: &mut bool,
     code_buf: &mut String,
     code_lang: &mut String,
     kind: &CodeBlockKind<'_>,
 ) {
-    trim_paragraph_gap_before_block(lines, last_block, item_stack);
+    trim_paragraph_gap_before_block(lines, last_block);
     *in_code = true;
     code_buf.clear();
     *code_lang = match kind {
@@ -1359,7 +1390,6 @@ pub(crate) fn parse_markdown_with_width(
                 start_code_block(
                     &mut lines,
                     last_block,
-                    &item_stack,
                     &mut in_code,
                     &mut code_buf,
                     &mut code_lang,
@@ -1373,10 +1403,15 @@ pub(crate) fn parse_markdown_with_width(
                     &mut lines,
                     &mut code_buf,
                     &mut code_lang,
-                    ss,
-                    theme,
-                    render_width,
-                    theme_colors,
+                    CodeBlockRenderContext {
+                        ss,
+                        theme,
+                        render_width,
+                        theme_colors,
+                        blockquote_depth,
+                        list_stack: &list_stack,
+                    },
+                    &mut item_stack,
                 );
                 last_block = LastBlock::Other;
             }
@@ -1391,7 +1426,7 @@ pub(crate) fn parse_markdown_with_width(
                 last_block = LastBlock::Other;
             }
             MdEvent::Start(Tag::List(start)) => {
-                start_list(&mut lines, last_block, &item_stack, &mut list_stack, start);
+                start_list(&mut lines, last_block, &mut list_stack, start);
                 last_block = LastBlock::Other;
             }
             MdEvent::End(TagEnd::List(_)) => {
