@@ -56,8 +56,13 @@ function Add-ToUserPath {
     if ($Dir -notin $pathParts) {
         $pathParts += $Dir
         [Environment]::SetEnvironmentVariable('Path', ($pathParts -join ';'), 'User')
+        if ($env:Path) {
+            $env:Path = "$Dir;$env:Path"
+        } else {
+            $env:Path = $Dir
+        }
         Write-Info "Added $Dir to your user PATH"
-        Write-Info "Open a new terminal for the PATH change to take effect."
+        Write-Info "PATH updated for current session"
     } else {
         Write-Info "$Dir is already in your user PATH"
     }
