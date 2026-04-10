@@ -6,35 +6,36 @@
   Terminal Markdown previewer — GUI-like experience.
 </p>
 
-## Install
+## Install or update
 
-Install the latest published binary:
+Install or update to the latest published binary.
+
+macOS / Linux / Android / Termux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.sh | sh
 ```
 
-Or download then run:
-
-```bash
-curl -fsSL -o install.sh https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.sh
-sh install.sh ~/.local/bin
-```
-
-On Windows:
+Windows:
 
 ```powershell
 irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
 ```
 
-Or download then run:
+Verify the installation:
 
-```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -Destination $env:LOCALAPPDATA\Programs\leaf
+```bash
+leaf --version
 ```
 
 ## Build
+
+Clone the repository:
+
+```bash
+git clone https://github.com/RivoLink/leaf.git
+cd leaf
+```
 
 Build the release binary locally:
 
@@ -55,12 +56,6 @@ If `~/.local/bin` is not already on your `PATH`, add it to `~/.bashrc` or `~/.zs
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Check the installed version:
-
-```bash
-leaf --version
-```
-
 ## Usage
 
 ```bash
@@ -77,6 +72,9 @@ leaf -- -notes.md
 # Pipe from stdin
 claude "explain Rust lifetimes" | leaf
 cat TESTING.md | leaf
+
+# Open the file picker in the current directory
+leaf
 ```
 
 ## Keybindings
@@ -101,14 +99,17 @@ cat TESTING.md | leaf
 ## Features
 
 - ✅ **Watch mode** `--watch` / `-w` — reloads every 250ms, with `⟳ reloaded` flash feedback
-- ✅ Syntax highlighting (200+ languages, syntect)
+- ✅ Syntax highlighting with common language aliases like `py`, `cpp`, `json`, `toml`, `ps1`, and `dockerfile`
 - ✅ Unicode box-drawing tables with left / center / right alignment
 - ✅ TOC sidebar with active section tracking and two-level navigation
-- ✅ Search with match highlighting and `n` / `N`
+- ✅ Search with match highlighting, `/`, `Ctrl+F`, and `n` / `N`
 - ✅ Code blocks `┌─ lang ───┐`
 - ✅ Bold, italic, strikethrough, blockquotes, lists, and horizontal rules
 - ✅ YAML frontmatter is ignored in both preview and TOC
-- ✅ Native stdin input
+- ✅ Native stdin input with bounded size
+- ✅ File picker when launched without a file
+- ✅ Theme picker with runtime preview
+- ✅ Help modal with in-app shortcuts
 
 ## Typical AI Workflow
 
@@ -126,3 +127,17 @@ leaf --watch notes.md
 - [ ] Copy code block `y`
 - [ ] Code block horizontal scroll
 - [ ] Improve search performance on large files
+
+## Troubleshooting
+
+### Windows: missing Visual C++ runtime
+
+If `leaf.exe` does not start on Windows and reports a missing MSVC runtime, install the latest supported Microsoft Visual C++ Redistributable from Microsoft Learn:
+
+- https://learn.microsoft.com/fr-fr/cpp/windows/latest-supported-vc-redist?view=msvc-170
+
+Direct download for the latest supported **X64** Microsoft Visual C++ Redistributable:
+
+- https://aka.ms/vc14/vc_redist.x64.exe
+
+For `leaf-windows-x86_64.exe`, the relevant package is the latest supported **X64** Visual C++ v14 Redistributable.
