@@ -1,6 +1,9 @@
 use crate::theme::{current_theme_preset, set_theme_preset, theme_preset_index};
 use crate::*;
-use crate::markdown::{parse_markdown, parse_markdown_with_width, resolve_syntax};
+use crate::app::FileChange;
+use crate::markdown::{
+    hash_str, parse_markdown, parse_markdown_with_width, read_file_state, resolve_syntax,
+};
 use crossterm::event::KeyEventKind;
 use ratatui::backend::TestBackend;
 use ratatui::{text::Line, widgets::Paragraph, Terminal};
@@ -87,6 +90,16 @@ fn key_release_events_are_ignored() {
     assert!(should_handle_key(KeyEventKind::Press));
     assert!(should_handle_key(KeyEventKind::Repeat));
     assert!(!should_handle_key(KeyEventKind::Release));
+}
+
+#[test]
+fn stdin_read_is_rejected_when_over_limit() {
+    let mut cursor = std::io::Cursor::new(vec![b'a'; 5]);
+    let err = read_stdin_with_limit(&mut cursor, 4).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("stdin exceeds the maximum supported size")
+    );
 }
 
 #[test]
@@ -686,4 +699,163 @@ fn file_picker_lists_dirs_then_markdown_files_only() {
     assert!(notes_idx < readme_idx);
 
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn check_modified_detects_file_metadata_change() {
+    let (ss, theme) = test_assets();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("leaf-check-modified-{unique}.md"));
+    fs::write(&path, "# Before\n").unwrap();
+
+    let src = fs::read_to_string(&path).unwrap();
+    let (lines, toc) = parse_markdown(&src, &ss, &theme);
+    let state = read_file_state(&path).unwrap();
+    let mut app = App::new_with_source(
+        lines,
+        toc,
+        AppConfig {
+            filename: path.file_name().unwrap().to_string_lossy().to_string(),
+            source: src.clone(),
+            debug_input: false,
+            watch: true,
+            filepath: Some(path.clone()),
+            last_file_state: Some(state),
+        },
+    );
+    app.set_last_content_hash(hash_str(&src));
+
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    fs::write(&path, "# After\nextra\n").unwrap();
+
+    let change = app.check_modified();
+    assert!(matches!(
+        change,
+        Some(FileChange::Metadata(_)) | Some(FileChange::Content(_))
+    ));
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn reload_returns_false_when_file_cannot_be_read() {
+    let (ss, _theme) = test_assets();
+    let ts = ThemeSet::load_defaults();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("leaf-reload-fail-{unique}.md"));
+    fs::write(&path, "# Demo\n").unwrap();
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: true,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+    assert!(app.load_path(path.clone(), &ss, &ts));
+
+    fs::remove_file(&path).unwrap();
+    assert!(!app.reload(&ss, &ts));
+}
+
+#[test]
+fn sync_render_width_preserves_scroll_proportion() {
+    let (ss, theme) = test_assets();
+    let ts = ThemeSet::load_defaults();
+    let source = (0..12)
+        .map(|idx| {
+            format!(
+                "Paragraph {idx} has enough repeated content to wrap differently when the render width changes significantly across reparses."
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let (lines, toc) = parse_markdown_with_width(&source, &ss, &theme, 80);
+    let mut app = App::new_with_source(
+        lines,
+        toc,
+        AppConfig {
+            filename: "stdin".to_string(),
+            source,
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    app.scroll_down(8);
+    let old_scroll = app.scroll();
+    let old_total = app.total();
+    assert!(app.sync_render_width(24, &ss, &ts));
+
+    let new_total = app.total();
+    let expected = ((old_scroll as f64 / old_total as f64) * new_total as f64) as usize;
+    assert_eq!(app.scroll(), expected.min(new_total.saturating_sub(1)));
+}
+
+#[test]
+fn check_modified_reports_metadata_when_no_previous_file_state() {
+    let (ss, theme) = test_assets();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("leaf-check-modified-initial-{unique}.md"));
+    fs::write(&path, "# Initial\n").unwrap();
+
+    let src = fs::read_to_string(&path).unwrap();
+    let (lines, toc) = parse_markdown(&src, &ss, &theme);
+    let mut app = App::new_with_source(
+        lines,
+        toc,
+        AppConfig {
+            filename: path.file_name().unwrap().to_string_lossy().to_string(),
+            source: src.clone(),
+            debug_input: false,
+            watch: true,
+            filepath: Some(path.clone()),
+            last_file_state: None,
+        },
+    );
+    app.set_last_content_hash(hash_str(&src));
+
+    assert!(matches!(app.check_modified(), Some(FileChange::Metadata(_))));
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
+    let (ss, theme) = test_assets();
+    let ts = ThemeSet::load_defaults();
+    let source = "One paragraph that does not matter much for this width clamp test.";
+    let (lines, toc) = parse_markdown_with_width(source, &ss, &theme, 20);
+    let mut app = App::new_with_source(
+        lines,
+        toc,
+        AppConfig {
+            filename: "stdin".to_string(),
+            source: source.to_string(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    assert!(app.sync_render_width(10, &ss, &ts));
+    assert!(!app.sync_render_width(10, &ss, &ts));
+    assert_eq!(app.total(), parse_markdown_with_width(source, &ss, &theme, 20).0.len());
 }

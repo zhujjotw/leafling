@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{fs::OpenOptions, io, io::IsTerminal, io::Read, io::Write, path::PathBuf};
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
@@ -20,6 +20,8 @@ use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
 use theme::{current_syntect_theme, set_theme_preset};
 
+const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
+
 #[cfg(test)]
 pub(crate) use app::{
     normalize_toc, should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry,
@@ -30,6 +32,27 @@ pub(crate) use markdown::{display_width, line_plain_text};
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
 pub(crate) use theme::{parse_theme_preset, theme_preset_label, ThemePreset, THEME_PRESETS};
+#[cfg(test)]
+pub(crate) use read_stdin_limited as read_stdin_with_limit;
+
+fn read_stdin_limited<R: Read>(reader: &mut R, max_bytes: usize) -> Result<String> {
+    let mut buf = Vec::with_capacity(max_bytes.min(8192));
+    let limit = u64::try_from(max_bytes)
+        .ok()
+        .and_then(|value| value.checked_add(1))
+        .context("stdin size limit is too large")?;
+    reader
+        .take(limit)
+        .read_to_end(&mut buf)
+        .context("Cannot read stdin")?;
+    if buf.len() > max_bytes {
+        bail!(
+            "stdin exceeds the maximum supported size of {} bytes",
+            max_bytes
+        );
+    }
+    String::from_utf8(buf).context("stdin is not valid UTF-8")
+}
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -86,10 +109,8 @@ fn main() -> Result<()> {
                 eprintln!("Error: --watch requires a file path (stdin cannot be watched)");
                 std::process::exit(1);
             }
-            let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .context("Cannot read stdin")?;
+            let mut stdin = io::stdin().lock();
+            let buf = read_stdin_limited(&mut stdin, MAX_STDIN_BYTES)?;
             (buf, "stdin".to_string(), None)
         }
     };
