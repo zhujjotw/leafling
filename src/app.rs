@@ -10,6 +10,7 @@ use crate::{
 };
 use ratatui::text::Line;
 use std::{
+    collections::VecDeque,
     fs,
     path::PathBuf,
     time::{Duration, Instant, SystemTime},
@@ -67,24 +68,77 @@ pub(crate) struct SearchState {
 pub(crate) struct FilePickerEntry {
     label: String,
     path: PathBuf,
-    is_dir: bool,
+    label_lower: String,
+    file_name: String,
+    file_name_lower: String,
+    file_name_offset: usize,
+    path_depth: usize,
 }
 
 impl FilePickerEntry {
+    fn new(label: String, path: PathBuf) -> Self {
+        let file_name = Self::file_name_component(&label).to_string();
+        let file_name_offset = label
+            .rfind(std::path::MAIN_SEPARATOR)
+            .map(|idx| label[..idx + 1].chars().count())
+            .unwrap_or(0);
+        let path_depth = label.matches(std::path::MAIN_SEPARATOR).count();
+
+        Self {
+            label_lower: label.to_lowercase(),
+            file_name_lower: file_name.to_lowercase(),
+            label,
+            path,
+            file_name,
+            file_name_offset,
+            path_depth,
+        }
+    }
+
     pub(crate) fn label(&self) -> &str {
         &self.label
     }
 
-    pub(crate) fn is_dir(&self) -> bool {
-        self.is_dir
+    fn label_lower(&self) -> &str {
+        &self.label_lower
+    }
+
+    fn file_name_lower(&self) -> &str {
+        &self.file_name_lower
+    }
+
+    fn file_name_offset(&self) -> usize {
+        self.file_name_offset
+    }
+
+    fn path_depth(&self) -> usize {
+        self.path_depth
+    }
+
+    fn file_name_component(path: &str) -> &str {
+        path.rsplit(std::path::MAIN_SEPARATOR).next().unwrap_or(path)
+    }
+
+    fn is_dir_like(&self) -> bool {
+        self.label == ".." || self.label.ends_with('/')
     }
 }
 
 pub(crate) struct FilePickerState {
     open: bool,
+    mode: FilePickerMode,
     dir: PathBuf,
     entries: Vec<FilePickerEntry>,
+    filtered: Vec<usize>,
+    match_positions: Vec<Vec<usize>>,
     index: usize,
+    query: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FilePickerMode {
+    Browser,
+    Fuzzy,
 }
 
 pub(crate) struct ThemePickerState {
@@ -144,11 +198,7 @@ impl App {
         let mut entries = Vec::new();
 
         if let Some(parent) = dir.parent() {
-            entries.push(FilePickerEntry {
-                label: "..".to_string(),
-                path: parent.to_path_buf(),
-                is_dir: true,
-            });
+            entries.push(FilePickerEntry::new("..".to_string(), parent.to_path_buf()));
         }
 
         let mut dirs = Vec::new();
@@ -163,29 +213,220 @@ impl App {
             let name = entry.file_name().to_string_lossy().to_string();
 
             if file_type.is_dir() {
-                dirs.push(FilePickerEntry {
-                    label: format!("{name}/"),
-                    path,
-                    is_dir: true,
-                });
+                dirs.push(FilePickerEntry::new(format!("{name}/"), path));
             } else if file_type.is_file() && Self::is_markdown_path(&path) {
-                files.push(FilePickerEntry {
-                    label: name,
-                    path,
-                    is_dir: false,
-                });
+                files.push(FilePickerEntry::new(name, path));
             }
         }
 
-        dirs.sort_by_key(|entry| entry.label.to_lowercase());
-        files.sort_by_key(|entry| entry.label.to_lowercase());
+        dirs.sort_by(|left, right| left.label_lower().cmp(right.label_lower()));
+        files.sort_by(|left, right| left.label_lower().cmp(right.label_lower()));
         entries.extend(dirs);
         entries.extend(files);
         Ok(entries)
     }
 
-    fn file_picker_entry_path(entry: &FilePickerEntry) -> PathBuf {
-        entry.path.clone()
+    fn build_fuzzy_file_picker_entries(
+        dir: &std::path::Path,
+    ) -> std::io::Result<Vec<FilePickerEntry>> {
+        let mut entries = Vec::new();
+        let mut queue = VecDeque::from([dir.to_path_buf()]);
+
+        while let Some(current_dir) = queue.pop_front() {
+            let mut dirs = Vec::new();
+            let mut files = Vec::new();
+
+            for entry in fs::read_dir(&current_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                let file_type = match entry.file_type() {
+                    Ok(file_type) => file_type,
+                    Err(_) => continue,
+                };
+
+                if file_type.is_dir() {
+                    dirs.push(path);
+                    continue;
+                }
+
+                if file_type.is_file() && Self::is_markdown_path(&path) {
+                    let label = path
+                        .strip_prefix(dir)
+                        .unwrap_or(&path)
+                        .display()
+                        .to_string();
+                    files.push(FilePickerEntry::new(label, path));
+                }
+            }
+
+            files.sort_by(|left, right| Self::fuzzy_entry_sort_key(left).cmp(&Self::fuzzy_entry_sort_key(right)));
+            dirs.sort_by_key(|path| {
+                let label = path
+                    .strip_prefix(dir)
+                    .unwrap_or(path)
+                    .display()
+                    .to_string();
+                (
+                    !label
+                        .split(std::path::MAIN_SEPARATOR)
+                        .next()
+                        .unwrap_or(&label)
+                        .starts_with('.'),
+                    label.to_lowercase(),
+                )
+            });
+
+            entries.extend(files);
+            queue.extend(dirs);
+        }
+
+        Ok(entries)
+    }
+
+    fn fuzzy_entry_sort_key(entry: &FilePickerEntry) -> (bool, &str) {
+        let first_component = entry
+            .label
+            .split(std::path::MAIN_SEPARATOR)
+            .next()
+            .unwrap_or(entry.label());
+        (!first_component.starts_with('.'), entry.label_lower())
+    }
+
+    fn fuzzy_component_match(candidate: &str, query: &str) -> Option<(usize, Vec<usize>)> {
+        if let Some(start) = candidate.find(query) {
+            let start_chars = candidate[..start].chars().count();
+            let query_len = query.chars().count();
+            let len_diff = candidate.chars().count().saturating_sub(query_len);
+            let prefix_bonus = usize::from(start_chars == 0).saturating_mul(80);
+            let boundary_bonus =
+                usize::from(Self::is_match_boundary(candidate, start_chars)).saturating_mul(40);
+            let score = start_chars
+                .saturating_mul(10)
+                .saturating_add(len_diff)
+                .saturating_sub(prefix_bonus)
+                .saturating_sub(boundary_bonus);
+            let positions = (start_chars..start_chars + query_len).collect::<Vec<_>>();
+            return Some((score, positions));
+        }
+
+        let mut search_from = 0usize;
+        let mut positions = Vec::with_capacity(query.len());
+
+        for needle in query.chars() {
+            let found = candidate[search_from..]
+                .char_indices()
+                .find(|(_, ch)| *ch == needle)
+                .map(|(idx, _)| search_from + idx)?;
+            let char_pos = candidate[..found].chars().count();
+            positions.push(char_pos);
+            search_from = found + needle.len_utf8();
+        }
+
+        let first = *positions.first()?;
+        let last = *positions.last()?;
+        let span = last.saturating_sub(first);
+        let gaps = positions
+            .windows(2)
+            .map(|window| window[1].saturating_sub(window[0]).saturating_sub(1))
+            .sum::<usize>();
+        let len_diff = candidate.chars().count().saturating_sub(query.chars().count());
+        let prefix_bonus = usize::from(first == 0).saturating_mul(80);
+        let boundary_bonus =
+            usize::from(Self::is_match_boundary(candidate, first)).saturating_mul(40);
+        let score = 1_000usize
+            .saturating_add(gaps.saturating_mul(120))
+            .saturating_add(first.saturating_mul(10))
+            .saturating_add(span)
+            .saturating_add(len_diff)
+            .saturating_sub(prefix_bonus)
+            .saturating_sub(boundary_bonus);
+        Some((score, positions))
+    }
+
+    fn is_match_boundary(candidate: &str, char_pos: usize) -> bool {
+        if char_pos == 0 {
+            return true;
+        }
+
+        candidate
+            .chars()
+            .nth(char_pos.saturating_sub(1))
+            .is_some_and(|ch| matches!(ch, '-' | '_' | '.' | ' '))
+    }
+
+    fn fuzzy_match(entry: &FilePickerEntry, query: &str) -> Option<(usize, Vec<usize>)> {
+        if query.is_empty() {
+            return Some((0, Vec::new()));
+        }
+
+        let (score, positions) = Self::fuzzy_component_match(entry.file_name_lower(), query)?;
+        Some((
+            score,
+            positions
+                .into_iter()
+                .map(|position| entry.file_name_offset() + position)
+                .collect(),
+        ))
+    }
+
+    fn refresh_file_picker_matches(&mut self) {
+        if self.is_browser_file_picker() {
+            self.file_picker.filtered = (0..self.file_picker.entries.len()).collect();
+            self.file_picker.match_positions = vec![Vec::new(); self.file_picker.filtered.len()];
+            self.file_picker.index = self
+                .file_picker
+                .index
+                .min(self.file_picker.filtered.len().saturating_sub(1));
+            return;
+        }
+
+        let query = self.file_picker.query.trim().to_lowercase();
+        let mut filtered = self
+            .file_picker
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, entry)| {
+                Self::fuzzy_match(entry, &query).map(|(score, positions)| {
+                    (
+                        idx,
+                        score,
+                        entry.path_depth(),
+                        entry.file_name_lower(),
+                        entry.label_lower(),
+                        positions,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        filtered.sort_by(
+            |(left_idx, left_score, left_depth, left_name, left_label, _),
+             (right_idx, right_score, right_depth, right_name, right_label, _)| {
+                left_score
+                    .cmp(right_score)
+                    .then_with(|| left_depth.cmp(right_depth))
+                    .then_with(|| left_name.cmp(right_name))
+                    .then_with(|| left_label.cmp(right_label))
+                    .then_with(|| left_idx.cmp(right_idx))
+            },
+        );
+
+        self.file_picker.filtered = filtered.iter().map(|(idx, ..)| *idx).collect();
+        self.file_picker.match_positions = filtered
+            .into_iter()
+            .map(|(_, _, _, _, _, positions)| positions)
+            .collect();
+        if self.file_picker.filtered.is_empty()
+            || self.file_picker.index >= self.file_picker.filtered.len()
+        {
+            self.file_picker.index = 0;
+        }
+    }
+
+    fn selected_file_picker_entry(&self) -> Option<&FilePickerEntry> {
+        let idx = *self.file_picker.filtered.get(self.file_picker.index)?;
+        self.file_picker.entries.get(idx)
     }
 
     #[cfg(test)]
@@ -264,9 +505,13 @@ impl App {
             help_open: false,
             file_picker: FilePickerState {
                 open: false,
+                mode: FilePickerMode::Browser,
                 dir: PathBuf::from("."),
                 entries: Vec::new(),
+                filtered: Vec::new(),
+                match_positions: Vec::new(),
                 index: 0,
+                query: String::new(),
             },
             theme_picker: ThemePickerState {
                 open: false,
@@ -570,16 +815,40 @@ impl App {
     }
 
     pub(crate) fn open_file_picker(&mut self, dir: PathBuf) -> bool {
-        match Self::build_file_picker_entries(&dir) {
+        self.open_file_picker_with_mode(dir, FilePickerMode::Browser)
+    }
+
+    pub(crate) fn open_fuzzy_file_picker(&mut self, dir: PathBuf) -> bool {
+        self.open_file_picker_with_mode(dir, FilePickerMode::Fuzzy)
+    }
+
+    fn open_file_picker_with_mode(&mut self, dir: PathBuf, mode: FilePickerMode) -> bool {
+        let entries = match mode {
+            FilePickerMode::Browser => Self::build_file_picker_entries(&dir),
+            FilePickerMode::Fuzzy => Self::build_fuzzy_file_picker_entries(&dir),
+        };
+
+        match entries {
             Ok(entries) => {
                 self.file_picker.open = true;
+                self.file_picker.mode = mode;
                 self.file_picker.dir = dir;
                 self.file_picker.entries = entries;
+                self.file_picker.query.clear();
                 self.file_picker.index = 0;
+                self.refresh_file_picker_matches();
                 true
             }
             Err(_) => false,
         }
+    }
+
+    pub(crate) fn is_fuzzy_file_picker(&self) -> bool {
+        self.file_picker.mode == FilePickerMode::Fuzzy
+    }
+
+    pub(crate) fn is_browser_file_picker(&self) -> bool {
+        self.file_picker.mode == FilePickerMode::Browser
     }
 
     pub(crate) fn is_file_picker_open(&self) -> bool {
@@ -594,12 +863,28 @@ impl App {
         &self.file_picker.entries
     }
 
+    pub(crate) fn file_picker_filtered_indices(&self) -> &[usize] {
+        &self.file_picker.filtered
+    }
+
+    pub(crate) fn file_picker_match_positions(&self, filtered_idx: usize) -> &[usize] {
+        self.file_picker
+            .match_positions
+            .get(filtered_idx)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
     pub(crate) fn file_picker_index(&self) -> usize {
         self.file_picker.index
     }
 
+    pub(crate) fn file_picker_query(&self) -> &str {
+        &self.file_picker.query
+    }
+
     pub(crate) fn move_file_picker_up(&mut self) {
-        let total = self.file_picker.entries.len();
+        let total = self.file_picker.filtered.len();
         if total == 0 {
             return;
         }
@@ -611,14 +896,41 @@ impl App {
     }
 
     pub(crate) fn move_file_picker_down(&mut self) {
-        let total = self.file_picker.entries.len();
+        let total = self.file_picker.filtered.len();
         if total == 0 {
             return;
         }
         self.file_picker.index = (self.file_picker.index + 1) % total;
     }
 
+    pub(crate) fn push_file_picker_query(&mut self, ch: char) {
+        if self.is_browser_file_picker() {
+            return;
+        }
+        self.file_picker.query.push(ch);
+        self.refresh_file_picker_matches();
+    }
+
+    pub(crate) fn pop_file_picker_query(&mut self) {
+        if self.is_browser_file_picker() {
+            return;
+        }
+        self.file_picker.query.pop();
+        self.refresh_file_picker_matches();
+    }
+
+    pub(crate) fn clear_file_picker_query(&mut self) {
+        if self.is_browser_file_picker() {
+            return;
+        }
+        self.file_picker.query.clear();
+        self.refresh_file_picker_matches();
+    }
+
     pub(crate) fn open_file_picker_parent(&mut self) -> bool {
+        if self.is_fuzzy_file_picker() {
+            return false;
+        }
         let Some(parent) = self.file_picker.dir.parent() else {
             return false;
         };
@@ -970,13 +1282,13 @@ impl App {
         ss: &SyntaxSet,
         themes: &ThemeSet,
     ) -> bool {
-        let Some(entry) = self.file_picker.entries.get(self.file_picker.index).cloned() else {
+        let Some(entry) = self.selected_file_picker_entry().cloned() else {
             return false;
         };
-        if entry.is_dir() {
-            self.open_file_picker(Self::file_picker_entry_path(&entry))
+        if self.is_browser_file_picker() && entry.is_dir_like() {
+            self.open_file_picker(entry.path)
         } else {
-            self.load_path(Self::file_picker_entry_path(&entry), ss, themes)
+            self.load_path(entry.path, ss, themes)
         }
     }
 

@@ -78,6 +78,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let CliOptions {
+        picker,
         watch,
         debug_input,
         file_arg,
@@ -96,7 +97,8 @@ fn main() -> Result<()> {
         writeln!(file, "leaf debug input log").ok();
     }
 
-    let mut open_picker_dir = None;
+    let mut open_browser_picker_dir = None;
+    let mut open_fuzzy_picker_dir = None;
     let (src, filename, filepath) = if let Some(f) = file_arg {
         let path = PathBuf::from(&f);
         let content = std::fs::read_to_string(&path)
@@ -113,7 +115,11 @@ fn main() -> Result<()> {
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
                 .unwrap_or_else(|| cwd.display().to_string());
-            open_picker_dir = Some(cwd);
+            if picker {
+                open_browser_picker_dir = Some(cwd);
+            } else {
+                open_fuzzy_picker_dir = Some(cwd);
+            }
             (String::new(), label, None)
         } else {
             if watch {
@@ -147,8 +153,11 @@ fn main() -> Result<()> {
         },
     );
     app.set_last_content_hash(last_content_hash);
-    if let Some(dir) = open_picker_dir {
+    if let Some(dir) = open_browser_picker_dir {
         app.open_file_picker(dir);
+    }
+    if let Some(dir) = open_fuzzy_picker_dir {
+        app.open_fuzzy_file_picker(dir);
     }
 
     let mut stdout = io::stdout();

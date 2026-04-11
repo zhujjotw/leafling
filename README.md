@@ -85,8 +85,11 @@ leaf -- -notes.md
 claude "explain Rust lifetimes" | leaf
 cat TESTING.md | leaf
 
-# Open the file picker in the current directory
+# Open the fuzzy Markdown picker in the current directory and subdirectories
 leaf
+
+# Open the classic directory browser picker
+leaf --picker
 
 ```
 
@@ -121,7 +124,8 @@ leaf
 - ✅ YAML frontmatter is ignored in both preview and TOC
 - ✅ Native stdin input with bounded size
 - ✅ `leaf --update` to fetch, verify via published SHA256, and install the latest release on supported platforms
-- ✅ File picker when launched without a file
+- ✅ Fuzzy Markdown picker when launched without a file
+- ✅ Classic directory browser picker with `leaf --picker`
 - ✅ Theme picker with runtime preview
 - ✅ Help modal with in-app shortcuts
 

@@ -102,15 +102,35 @@ pub(crate) fn run(
                         }
                     } else if app.is_file_picker_open() {
                         match key.code {
-                            KeyCode::Char('q') => break,
                             KeyCode::Char('?') => app.open_help(),
                             KeyCode::Enter => {
                                 state_changed = app.activate_file_picker_selection(ss, themes);
                             }
+                            KeyCode::Char('q') if app.is_browser_file_picker() => break,
                             KeyCode::Char('j') | KeyCode::Down => app.move_file_picker_down(),
                             KeyCode::Char('k') | KeyCode::Up => app.move_file_picker_up(),
-                            KeyCode::Backspace | KeyCode::Char('h') | KeyCode::Left => {
+                            KeyCode::Esc => {
+                                if app.is_browser_file_picker() || app.file_picker_query().is_empty() {
+                                    state_changed = false;
+                                } else {
+                                    app.clear_file_picker_query();
+                                }
+                            }
+                            KeyCode::Char('h') | KeyCode::Left if app.is_browser_file_picker() => {
                                 state_changed = app.open_file_picker_parent();
+                            }
+                            KeyCode::Backspace if app.is_browser_file_picker() => {
+                                state_changed = app.open_file_picker_parent();
+                            }
+                            KeyCode::Backspace => app.pop_file_picker_query(),
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                break;
+                            }
+                            KeyCode::Char(c)
+                                if app.is_fuzzy_file_picker()
+                                    && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+                            {
+                                app.push_file_picker_query(c);
                             }
                             _ => state_changed = false,
                         }

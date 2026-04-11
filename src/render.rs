@@ -271,7 +271,11 @@ pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
     if app.is_search_mode() {
         &["enter confirm", "esc cancel"]
     } else if app.is_file_picker_open() {
-        &["j/k move", "enter open", "backspace up", "q quit"]
+        if app.is_fuzzy_file_picker() {
+            &["j/k move", "enter open", "backspace delete", "ctrl+c quit"]
+        } else {
+            &["j/k move", "enter open", "backspace up", "ctrl+c quit"]
+        }
     } else if app.is_theme_picker_open() {
         &["j/k preview", "enter keep", "esc restore"]
     } else if app.is_help_open() {
@@ -468,15 +472,19 @@ fn render_theme_picker(f: &mut Frame, app: &App) {
 
 fn render_file_picker(f: &mut Frame, app: &App) {
     let theme = app_theme();
-    let area = centered_rect(70, 18, f.area());
+    let area = centered_rect(78, 20, f.area());
     let title_style = Style::default()
         .fg(theme.markdown.heading_2)
         .add_modifier(Modifier::BOLD);
     let section_style = Style::default().fg(theme.ui.status_shortcut_fg);
     let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
     let inner_height = area.height.saturating_sub(2) as usize;
-    let visible_slots = inner_height.saturating_sub(5);
-    let total = app.file_picker_entries().len();
+    let header_lines = if app.is_fuzzy_file_picker() { 4 } else { 3 };
+    let max_visible_slots = if app.is_fuzzy_file_picker() { 12 } else { 13 };
+    let visible_slots = inner_height
+        .saturating_sub(header_lines + 1)
+        .min(max_visible_slots);
+    let total = app.file_picker_filtered_indices().len();
     let start = if visible_slots == 0 || app.file_picker_index() < visible_slots {
         0
     } else {
@@ -486,64 +494,106 @@ fn render_file_picker(f: &mut Frame, app: &App) {
 
     let mut lines = vec![
         Line::from(vec![Span::styled("Open a Markdown file", title_style)]),
-        Line::from(vec![Span::styled(
-            app.file_picker_dir().display().to_string(),
-            section_style,
-        )]),
-        Line::from(""),
+        Line::from(vec![
+            Span::styled("Dir: ", section_style),
+            Span::styled(
+                app.file_picker_dir().display().to_string(),
+                Style::default().fg(theme.ui.toc_primary_inactive),
+            ),
+        ]),
     ];
 
-    if total == 0 {
+    if app.is_fuzzy_file_picker() {
+        lines.push(Line::from(vec![
+            Span::styled("Query: ", section_style),
+            Span::styled(
+                if app.file_picker_query().is_empty() {
+                    " type to filter ".to_string()
+                } else {
+                    format!(" {} ", app.file_picker_query())
+                },
+                Style::default()
+                    .fg(if app.file_picker_query().is_empty() {
+                        theme.ui.toc_primary_inactive
+                    } else {
+                        theme.ui.toc_primary_active
+                    })
+                    .bg(theme.markdown.inline_code_bg),
+            ),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+
+    if app.file_picker_entries().is_empty() {
         lines.push(Line::from(vec![Span::styled(
-            "No folders or Markdown files here",
+            if app.is_fuzzy_file_picker() {
+                "No Markdown file found in this directory or its subdirectories"
+            } else {
+                "No folders or Markdown files here"
+            },
+            Style::default().fg(theme.ui.toc_primary_inactive),
+        )]));
+    } else if total == 0 {
+        lines.push(Line::from(vec![Span::styled(
+            "No match for the current query",
             Style::default().fg(theme.ui.toc_primary_inactive),
         )]));
     } else {
-        for (idx, entry) in app.file_picker_entries()[start..end].iter().enumerate() {
+        for (idx, entry_idx) in app.file_picker_filtered_indices()[start..end]
+            .iter()
+            .enumerate()
+        {
             let actual_idx = start + idx;
             let selected = actual_idx == app.file_picker_index();
+            let entry = &app.file_picker_entries()[*entry_idx];
             let bg = if selected {
                 theme.ui.toc_active_bg
             } else {
                 theme.ui.toc_bg
             };
             let marker = if selected { "▸ " } else { "  " };
-            lines.push(Line::from(vec![
-                Span::styled(
-                    marker,
-                    Style::default()
-                        .fg(theme.ui.toc_accent)
-                        .bg(bg)
-                        .add_modifier(if selected {
-                            Modifier::BOLD
-                        } else {
-                            Modifier::empty()
-                        }),
-                ),
-                Span::styled(
+            let label_spans = if app.is_fuzzy_file_picker() {
+                highlighted_picker_label(entry.label(), app.file_picker_match_positions(actual_idx), bg, selected)
+            } else {
+                vec![Span::styled(
                     entry.label().to_string(),
                     Style::default()
-                        .fg(if entry.is_dir() {
-                            theme.ui.toc_primary_active
-                        } else {
-                            theme.ui.toc_primary_inactive
-                        })
+                        .fg(theme.ui.toc_primary_inactive)
                         .bg(bg)
                         .add_modifier(if selected {
                             Modifier::BOLD
                         } else {
                             Modifier::empty()
                         }),
-                ),
-            ]));
+                )]
+            };
+            let mut spans = vec![Span::styled(
+                marker,
+                Style::default()
+                    .fg(theme.ui.toc_accent)
+                    .bg(bg)
+                    .add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+            )];
+            spans.extend(label_spans);
+            lines.push(Line::from(spans));
         }
     }
 
-    while lines.len() < inner_height.saturating_sub(1) {
+    while lines.len() < inner_height.saturating_sub(2) {
         lines.push(Line::from(""));
     }
+    lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
-        "Enter open • Backspace up • q quit",
+        if app.is_fuzzy_file_picker() {
+            "enter open • type filter • esc clear • ctrl+c quit"
+        } else {
+            "enter open • backspace up • ctrl+c quit"
+        },
         footer_style.bg(theme.ui.toc_bg),
     )]));
 
@@ -559,6 +609,73 @@ fn render_file_picker(f: &mut Frame, app: &App) {
         ),
         area,
     );
+}
+
+fn highlighted_picker_label(
+    label: &str,
+    match_positions: &[usize],
+    bg: Color,
+    selected: bool,
+) -> Vec<Span<'static>> {
+    let theme = app_theme();
+    let default_style = Style::default()
+        .fg(theme.ui.toc_primary_inactive)
+        .bg(bg)
+        .add_modifier(if selected {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        });
+    let matched_style = Style::default()
+        .fg(theme.ui.toc_accent)
+        .bg(bg)
+        .add_modifier(if selected {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        });
+
+    if match_positions.is_empty() {
+        return vec![Span::styled(label.to_string(), default_style)];
+    }
+
+    let match_set = match_positions.iter().copied().collect::<std::collections::BTreeSet<_>>();
+    let mut spans = Vec::new();
+    let mut buffer = String::new();
+    let mut current_matched = None;
+
+    for (idx, ch) in label.chars().enumerate() {
+        let is_matched = match_set.contains(&idx);
+        if current_matched == Some(is_matched) || current_matched.is_none() {
+            buffer.push(ch);
+            current_matched = Some(is_matched);
+            continue;
+        }
+
+        spans.push(Span::styled(
+            std::mem::take(&mut buffer),
+            if current_matched == Some(true) {
+                matched_style
+            } else {
+                default_style
+            },
+        ));
+        buffer.push(ch);
+        current_matched = Some(is_matched);
+    }
+
+    if !buffer.is_empty() {
+        spans.push(Span::styled(
+            buffer,
+            if current_matched == Some(true) {
+                matched_style
+            } else {
+                default_style
+            },
+        ));
+    }
+
+    spans
 }
 
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
