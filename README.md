@@ -165,3 +165,17 @@ Close any terminal session still running `leaf`, then rerun the PowerShell insta
 ```powershell
 irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
 ```
+
+## Uninstall
+
+macOS / Linux / Android / Termux:
+
+```bash
+rm -f ~/.local/bin/leaf
+```
+
+Windows:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Programs\leaf\leaf.exe" -Force
+```
