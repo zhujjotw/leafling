@@ -6,9 +6,9 @@
   Terminal Markdown previewer — GUI-like experience.
 </p>
 
-## Install or update
+## Install
 
-Install or update to the latest published binary.
+Install the latest published binary.
 
 macOS / Linux / Android / Termux:
 
@@ -27,6 +27,18 @@ Verify the installation:
 ```bash
 leaf --version
 ```
+
+## Update
+
+Update an existing installation to the latest published release:
+
+```bash
+leaf --update
+```
+
+`leaf --update` downloads the matching published asset, verifies it against the published `checksums.txt` SHA256, and then installs it.
+
+On Windows, if replacing the running `.exe` is blocked by the OS, rerun the PowerShell installer from the install section.
 
 ## Build
 
@@ -76,8 +88,6 @@ cat TESTING.md | leaf
 # Open the file picker in the current directory
 leaf
 
-# Update to the latest published version
-leaf --update
 ```
 
 ## Keybindings
@@ -146,10 +156,12 @@ Direct download for the latest supported **X64** Microsoft Visual C++ Redistribu
 
 For `leaf-windows-x86_64.exe`, the relevant package is the latest supported **X64** Visual C++ v14 Redistributable.
 
-### Windows: `leaf --update`
+### Windows: update or file replacement error
 
-`leaf --update` verifies the downloaded binary against the published `checksums.txt` SHA256 before installation.
+If `leaf --update` fails on Windows with an error about replacing, renaming, or writing `leaf.exe`, the running executable was likely locked by the OS.
 
-On Unix-like systems, it then replaces the current binary in place.
+Close any terminal session still running `leaf`, then rerun the PowerShell installer from the install section:
 
-On Windows, replacing the running `.exe` can be blocked by the OS. If `leaf --update` cannot complete there, rerun the PowerShell installer from the install section.
+```powershell
+irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
+```
