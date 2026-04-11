@@ -272,7 +272,7 @@ pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
         &["enter confirm", "esc cancel"]
     } else if app.is_file_picker_open() {
         if app.is_fuzzy_file_picker() {
-            &["j/k move", "enter open", "backspace delete", "ctrl+c quit"]
+            &["↑/↓ move", "enter open", "backspace delete", "ctrl+c quit"]
         } else {
             &["j/k move", "enter open", "backspace up", "ctrl+c quit"]
         }
@@ -590,7 +590,7 @@ fn render_file_picker(f: &mut Frame, app: &App) {
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
         if app.is_fuzzy_file_picker() {
-            "enter open • type filter • esc clear • ctrl+c quit"
+            "↑/↓ move • enter open • type filter • esc clear • ctrl+c quit"
         } else {
             "enter open • backspace up • ctrl+c quit"
         },

@@ -27,6 +27,8 @@ struct GithubAsset {
 }
 
 pub(crate) fn run_update() -> Result<()> {
+    println!("Updating leaf...");
+
     let current_version = env!("CARGO_PKG_VERSION");
     let asset_name = current_asset_name()?;
     let release = fetch_latest_release()?;
@@ -50,7 +52,7 @@ pub(crate) fn run_update() -> Result<()> {
 
     match replace_binary(&current_exe, &temp_path) {
         Ok(()) => {
-            println!("Updated leaf from {current_version} to {latest_version}");
+            println!("leaf updated from {current_version} to {latest_version}");
             Ok(())
         }
         Err(err) => {

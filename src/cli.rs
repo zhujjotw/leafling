@@ -15,7 +15,7 @@ pub(crate) struct CliOptions {
 }
 
 pub(crate) fn usage_text() -> &'static str {
-    "Usage:  leaf [--watch] [--theme arctic|forest|ocean|solarized-dark] [file.md]\n        leaf --picker\n        leaf --update\n        echo '# Hello' | leaf"
+    "Usage:  leaf [--watch] [--theme arctic|forest|ocean|solarized-dark] [file.md]\n        leaf [--watch] --picker\n        leaf --update\n        echo '# Hello' | leaf"
 }
 
 pub(crate) fn version_text() -> &'static str {
@@ -83,9 +83,9 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
     }
 
     if options.picker {
-        let has_non_picker_flags = options.watch || options.file_arg.is_some();
+        let has_non_picker_flags = options.file_arg.is_some();
         if has_non_picker_flags {
-            anyhow::bail!("--picker cannot be combined with --watch or a file path");
+            anyhow::bail!("--picker cannot be combined with a file path");
         }
     }
 
