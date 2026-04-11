@@ -136,15 +136,17 @@ fn parse_cli_accepts_picker_on_its_own() {
 }
 
 #[test]
-fn parse_cli_rejects_picker_with_watch() {
+fn parse_cli_accepts_picker_with_watch() {
     let args = vec![
         "leaf".to_string(),
         "--picker".to_string(),
         "--watch".to_string(),
     ];
 
-    let err = parse_cli(&args).unwrap_err();
-    assert!(err.to_string().contains("--picker cannot be combined"));
+    let options = parse_cli(&args).unwrap();
+    assert!(options.picker);
+    assert!(options.watch);
+    assert_eq!(options.file_arg, None);
 }
 
 #[test]

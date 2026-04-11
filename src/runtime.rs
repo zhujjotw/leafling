@@ -107,8 +107,18 @@ pub(crate) fn run(
                                 state_changed = app.activate_file_picker_selection(ss, themes);
                             }
                             KeyCode::Char('q') if app.is_browser_file_picker() => break,
-                            KeyCode::Char('j') | KeyCode::Down => app.move_file_picker_down(),
-                            KeyCode::Char('k') | KeyCode::Up => app.move_file_picker_up(),
+                            KeyCode::Char('j') | KeyCode::Down if app.is_browser_file_picker() => {
+                                app.move_file_picker_down()
+                            }
+                            KeyCode::Char('k') | KeyCode::Up if app.is_browser_file_picker() => {
+                                app.move_file_picker_up()
+                            }
+                            KeyCode::Down if app.is_fuzzy_file_picker() => {
+                                app.move_file_picker_down()
+                            }
+                            KeyCode::Up if app.is_fuzzy_file_picker() => {
+                                app.move_file_picker_up()
+                            }
                             KeyCode::Esc => {
                                 if app.is_browser_file_picker() || app.file_picker_query().is_empty() {
                                     state_changed = false;

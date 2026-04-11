@@ -71,25 +71,33 @@ export PATH="$HOME/.local/bin:$PATH"
 ## Usage
 
 ```bash
-# Preview a file
+# Open a Markdown file
 leaf TESTING.md
 
 # Watch mode — reloads automatically on save
 leaf --watch TESTING.md
 leaf -w TESTING.md
 
-# Open a dash-prefixed filename
-leaf -- -notes.md
-
-# Pipe from stdin
-claude "explain Rust lifetimes" | leaf
-cat TESTING.md | leaf
-
-# Open the fuzzy Markdown picker in the current directory and subdirectories
+# Open the fuzzy Markdown picker
 leaf
 
 # Open the classic directory browser picker
 leaf --picker
+
+# Open the fuzzy Markdown picker, then watch the selected file
+leaf -w
+
+# Open the classic directory browser picker, then watch the selected file
+leaf -w --picker
+
+# Open a dash-prefixed filename
+leaf -- -notes.md
+
+# Stream Markdown from another CLI tool
+claude "explain Rust lifetimes" | leaf
+
+# Preview a local file through stdin
+cat TESTING.md | leaf
 
 ```
 
@@ -115,6 +123,7 @@ leaf --picker
 ## Features
 
 - ✅ **Watch mode** `--watch` / `-w` — reloads every 250ms, with `⟳ reloaded` flash feedback
+- ✅ `leaf --watch` can start from the picker and begin watching after file selection
 - ✅ Syntax highlighting with common language aliases like `py`, `cpp`, `json`, `toml`, `ps1`, and `dockerfile`
 - ✅ Unicode box-drawing tables with left / center / right alignment
 - ✅ TOC sidebar with active section tracking and two-level navigation
