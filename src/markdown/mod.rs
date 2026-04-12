@@ -1,4 +1,7 @@
 pub(crate) mod toc;
+pub(crate) mod width;
+
+pub(crate) use width::{build_plain_lines, display_width, line_plain_text, truncate_display_width};
 
 use crate::theme::{app_theme, MarkdownTheme};
 use pulldown_cmark::{
@@ -18,8 +21,7 @@ use syntect::{
 };
 use toc::{normalize_toc, TocEntry};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-
-const TAB_STOP: usize = 4;
+use width::expand_tabs;
 
 #[derive(Clone, Copy)]
 enum ListKind {
@@ -71,14 +73,6 @@ struct CodeBlockRenderContext<'a> {
     list_stack: &'a [ListKind],
 }
 
-pub(crate) fn line_plain_text(line: &Line<'_>) -> String {
-    line.spans.iter().map(|s| s.content.as_ref()).collect()
-}
-
-pub(crate) fn build_plain_lines(lines: &[Line<'_>]) -> Vec<String> {
-    lines.iter().map(line_plain_text).collect()
-}
-
 pub(crate) fn hash_str(text: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut hasher);
@@ -95,60 +89,6 @@ pub(crate) fn read_file_state(path: &PathBuf) -> Option<crate::app::FileState> {
 
 pub(crate) fn hash_file_contents(path: &PathBuf) -> io::Result<u64> {
     std::fs::read_to_string(path).map(|contents| hash_str(&contents))
-}
-
-pub(crate) fn truncate_display_width(text: &str, max_width: usize) -> String {
-    if display_width(text) <= max_width {
-        return text.to_string();
-    }
-    if max_width == 0 {
-        return String::new();
-    }
-
-    let mut out = String::new();
-    let mut used = 0;
-    for ch in text.chars() {
-        let ch_w = UnicodeWidthChar::width(ch).unwrap_or(0);
-        if used + ch_w > max_width.saturating_sub(1) {
-            break;
-        }
-        out.push(ch);
-        used += ch_w;
-    }
-    out.push('…');
-    out
-}
-
-pub(crate) fn display_width(text: &str) -> usize {
-    let mut width = 0;
-    let mut parts = text.split('\t').peekable();
-    while let Some(segment) = parts.next() {
-        width += UnicodeWidthStr::width(segment);
-        if parts.peek().is_some() {
-            width += TAB_STOP - (width % TAB_STOP);
-        }
-    }
-    width
-}
-
-fn expand_tabs(text: &str, start_width: usize) -> String {
-    if !text.contains('\t') {
-        return text.to_string();
-    }
-
-    let mut out = String::new();
-    let mut width = start_width;
-    let mut parts = text.split('\t').peekable();
-    while let Some(segment) = parts.next() {
-        out.push_str(segment);
-        width += UnicodeWidthStr::width(segment);
-        if parts.peek().is_some() {
-            let spaces = TAB_STOP - (width % TAB_STOP);
-            out.push_str(&" ".repeat(spaces));
-            width += spaces;
-        }
-    }
-    out
 }
 
 pub(crate) fn highlight_line<'a>(line: &Line<'a>) -> Line<'a> {
