@@ -1,5 +1,6 @@
 pub(crate) mod toc;
 pub(crate) mod width;
+mod wrapping;
 
 pub(crate) use width::{build_plain_lines, display_width, line_plain_text, truncate_display_width};
 
@@ -22,6 +23,7 @@ use syntect::{
 use toc::{normalize_toc, TocEntry};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use width::expand_tabs;
+use wrapping::push_wrapped_prefixed_lines;
 
 #[derive(Clone, Copy)]
 enum ListKind {
@@ -301,163 +303,6 @@ fn list_item_prefix(
     };
     prefix.push(Span::styled(marker, marker_style));
     prefix
-}
-
-fn push_wrapped_prefixed_lines(
-    lines: &mut Vec<Line<'static>>,
-    body_spans: &mut Vec<Span<'static>>,
-    first_prefix: Vec<Span<'static>>,
-    continuation_prefix: Vec<Span<'static>>,
-    render_width: usize,
-) {
-    if body_spans.is_empty() {
-        return;
-    }
-
-    let first_prefix_width: usize = first_prefix
-        .iter()
-        .map(|span| display_width(span.content.as_ref()))
-        .sum();
-    let continuation_prefix_width: usize = continuation_prefix
-        .iter()
-        .map(|span| display_width(span.content.as_ref()))
-        .sum();
-    let max_width = render_width
-        .saturating_sub(first_prefix_width.max(continuation_prefix_width))
-        .max(8);
-
-    let mut current_prefix = first_prefix.clone();
-    let mut next_prefix = continuation_prefix.clone();
-    let mut current_width = 0usize;
-    let mut body_started = false;
-
-    let push_current = |lines: &mut Vec<Line<'static>>,
-                        current_prefix: &mut Vec<Span<'static>>,
-                        next_prefix: &mut Vec<Span<'static>>,
-                        body_started: &mut bool,
-                        current_width: &mut usize| {
-        if *body_started {
-            lines.push(Line::from(std::mem::take(current_prefix)));
-            *current_prefix = next_prefix.clone();
-            *body_started = false;
-            *current_width = 0;
-        }
-    };
-
-    for span in body_spans.drain(..) {
-        let style = span.style;
-        let mut token = String::new();
-        let mut token_is_space = false;
-
-        let mut flush_token = |token: &mut String,
-                               token_is_space: bool,
-                               lines: &mut Vec<Line<'static>>,
-                               current_prefix: &mut Vec<Span<'static>>,
-                               body_started: &mut bool,
-                               current_width: &mut usize| {
-            if token.is_empty() {
-                return;
-            }
-
-            let token_width = display_width(token);
-            if token_is_space {
-                let keep_styled_padding = style.bg.is_some();
-                if (*body_started || keep_styled_padding)
-                    && *current_width + token_width <= max_width
-                {
-                    current_prefix.push(Span::styled(std::mem::take(token), style));
-                    *current_width += token_width;
-                    *body_started = true;
-                } else {
-                    token.clear();
-                }
-                return;
-            }
-
-            if *body_started && *current_width + token_width > max_width {
-                push_current(
-                    lines,
-                    current_prefix,
-                    &mut next_prefix,
-                    body_started,
-                    current_width,
-                );
-            }
-
-            if token_width <= max_width {
-                current_prefix.push(Span::styled(std::mem::take(token), style));
-                *current_width += token_width;
-                *body_started = true;
-                return;
-            }
-
-            let mut chunk = String::new();
-            let mut chunk_width = 0usize;
-            for ch in token.chars() {
-                let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
-                let would_overflow = if *body_started {
-                    *current_width + chunk_width + ch_width > max_width
-                } else {
-                    chunk_width + ch_width > max_width
-                };
-                if would_overflow {
-                    if !chunk.is_empty() {
-                        current_prefix.push(Span::styled(std::mem::take(&mut chunk), style));
-                        *body_started = true;
-                    }
-                    push_current(
-                        lines,
-                        current_prefix,
-                        &mut next_prefix,
-                        body_started,
-                        current_width,
-                    );
-                    chunk_width = 0;
-                }
-
-                chunk.push(ch);
-                chunk_width += ch_width;
-            }
-
-            if !chunk.is_empty() {
-                current_prefix.push(Span::styled(chunk, style));
-                *current_width += chunk_width;
-                *body_started = true;
-            }
-            token.clear();
-        };
-
-        for ch in span.content.chars() {
-            let is_space = ch.is_whitespace();
-            if token.is_empty() {
-                token_is_space = is_space;
-            } else if token_is_space != is_space {
-                flush_token(
-                    &mut token,
-                    token_is_space,
-                    lines,
-                    &mut current_prefix,
-                    &mut body_started,
-                    &mut current_width,
-                );
-                token_is_space = is_space;
-            }
-            token.push(ch);
-        }
-
-        flush_token(
-            &mut token,
-            token_is_space,
-            lines,
-            &mut current_prefix,
-            &mut body_started,
-            &mut current_width,
-        );
-    }
-
-    if body_started {
-        lines.push(Line::from(current_prefix));
-    }
 }
 
 fn push_wrapped_blockquote_lines(
