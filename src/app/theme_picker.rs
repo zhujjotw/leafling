@@ -139,9 +139,13 @@ impl App {
 
     pub(crate) fn store_current_theme_preview(&mut self) {
         let preset = current_theme_preset();
-        let lines = self.lines.clone();
-        let toc = self.toc.clone();
-        self.store_theme_preview(preset, &lines, &toc);
+        let idx = theme_preset_index(preset);
+        if let Some(slot) = self.theme_picker.preview_cache.get_mut(idx) {
+            *slot = Some(ThemePreviewCacheEntry {
+                lines: self.lines.clone(),
+                toc: self.toc.clone(),
+            });
+        }
     }
 
     pub(crate) fn invalidate_theme_preview_cache(&mut self) {
