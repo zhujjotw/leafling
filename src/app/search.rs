@@ -60,26 +60,13 @@ impl App {
         self.search.draft.push(ch);
     }
 
-    pub(crate) fn folded_plain_lines(&mut self) -> &[String] {
-        if self.folded_plain_lines.is_none() {
-            self.folded_plain_lines = Some(
-                self.plain_lines
-                    .iter()
-                    .map(|line| line.to_lowercase())
-                    .collect(),
-            );
-        }
-        self.folded_plain_lines.as_deref().unwrap_or(&[])
-    }
-
     pub(crate) fn run_search(&mut self) {
         let q = self.search.query.to_lowercase();
         if q.is_empty() {
             return;
         }
         let search_matches = {
-            let folded_lines = self.folded_plain_lines();
-            folded_lines
+            self.plain_lines
                 .iter()
                 .enumerate()
                 .filter(|(_, line)| line.contains(&q))

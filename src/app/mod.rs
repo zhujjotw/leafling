@@ -62,7 +62,6 @@ pub(crate) struct AppConfig {
 pub(crate) struct App {
     pub(super) lines: Vec<Line<'static>>,
     pub(super) plain_lines: Vec<String>,
-    pub(super) folded_plain_lines: Option<Vec<String>>,
     pub(super) scroll: usize,
     pub(super) toc: Vec<TocEntry>,
     toc_visible: bool,
@@ -138,11 +137,13 @@ impl App {
             filepath,
             last_file_state,
         } = config;
-        let plain_lines = build_plain_lines(&lines);
+        let plain_lines = build_plain_lines(&lines)
+            .into_iter()
+            .map(|line| line.to_lowercase())
+            .collect();
         let mut app = Self {
             lines,
             plain_lines,
-            folded_plain_lines: None,
             scroll: 0,
             toc,
             toc_visible: false,
@@ -248,8 +249,10 @@ impl App {
     }
 
     pub(crate) fn replace_content(&mut self, lines: Vec<Line<'static>>, toc: Vec<TocEntry>) {
-        self.plain_lines = build_plain_lines(&lines);
-        self.folded_plain_lines = None;
+        self.plain_lines = build_plain_lines(&lines)
+            .into_iter()
+            .map(|line| line.to_lowercase())
+            .collect();
         self.lines = lines;
         self.toc = toc;
         self.highlighted_line_cache = None;
