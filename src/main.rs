@@ -31,16 +31,16 @@ pub(crate) use app::{
 #[cfg(test)]
 pub(crate) use markdown::{display_width, line_plain_text};
 #[cfg(test)]
+pub(crate) use read_stdin_limited as read_stdin_with_limit;
+#[cfg(test)]
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
 pub(crate) use theme::{parse_theme_preset, theme_preset_label, ThemePreset, THEME_PRESETS};
 #[cfg(test)]
 pub(crate) use update::{
-    asset_name_for_target, expected_asset_download_url, find_expected_checksum,
-    is_newer_version, validate_download_size, validate_sha256_hex,
+    asset_name_for_target, expected_asset_download_url, find_expected_checksum, is_newer_version,
+    validate_download_size, validate_sha256_hex,
 };
-#[cfg(test)]
-pub(crate) use read_stdin_limited as read_stdin_with_limit;
 
 fn read_stdin_limited<R: Read>(reader: &mut R, max_bytes: usize) -> Result<String> {
     let mut buf = Vec::with_capacity(max_bytes.min(8192));
@@ -85,6 +85,7 @@ fn main() -> Result<()> {
         theme,
         ..
     } = options;
+    runtime::debug_log(debug_input, &format!("main start args={args:?}"));
     set_theme_preset(theme);
 
     if debug_input {
@@ -135,6 +136,18 @@ fn main() -> Result<()> {
     let ss = SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
     let theme = current_syntect_theme(&ts).clone();
+    runtime::debug_log(
+        debug_input,
+        &format!(
+            "main input_ready filename={filename} filepath={} picker={} watch={}",
+            filepath
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "<none>".to_string()),
+            picker,
+            watch
+        ),
+    );
 
     let last_file_state = filepath.as_ref().and_then(read_file_state);
     let last_content_hash = hash_str(&src);
@@ -154,16 +167,53 @@ fn main() -> Result<()> {
     );
     app.set_last_content_hash(last_content_hash);
     if let Some(dir) = open_browser_picker_dir {
-        app.open_file_picker(dir);
+        app.queue_file_picker(dir);
     }
     if let Some(dir) = open_fuzzy_picker_dir {
-        app.open_fuzzy_file_picker(dir);
+        app.queue_fuzzy_file_picker(dir);
     }
+    runtime::debug_log(
+        debug_input,
+        &format!(
+            "main app_ready pending_picker={} picker_loading={}",
+            app.has_pending_picker(),
+            app.is_picker_loading()
+        ),
+    );
 
     let mut stdout = io::stdout();
+    runtime::debug_log(debug_input, "terminal enter start");
     let mut session = TerminalSession::enter(&mut stdout)?;
+    runtime::debug_log(debug_input, "terminal enter done");
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
-    let run_result = run(&mut terminal, &mut app, &ss, &ts);
+    runtime::debug_log(debug_input, "terminal new done");
+    terminal.clear()?;
+    runtime::debug_log(debug_input, "terminal clear done");
+    let initial_draw_result = (|| -> Result<()> {
+        let area = terminal.size()?;
+        runtime::debug_log(
+            debug_input,
+            &format!(
+                "initial_draw size width={} height={}",
+                area.width, area.height
+            ),
+        );
+        runtime::prepare_initial_picker_state(area.width as usize, &mut app, &ss, &ts)?;
+        runtime::debug_log(debug_input, "initial_draw draw start");
+        terminal.draw(|f| render::ui(f, &mut app))?;
+        runtime::debug_log(debug_input, "initial_draw draw done");
+        session.finish_initial_draw(&mut terminal)?;
+        runtime::debug_log(debug_input, "initial_draw sync end done");
+        Ok(())
+    })();
+    let run_result = match initial_draw_result {
+        Ok(()) => {
+            runtime::debug_log(debug_input, "run loop start");
+            run(&mut terminal, &mut app, &ss, &ts, true)
+        }
+        Err(err) => Err(err),
+    };
+    runtime::debug_log(debug_input, "run loop end");
     let restore_result = session.restore(&mut terminal);
     finish_with_restore(run_result, restore_result)
 }

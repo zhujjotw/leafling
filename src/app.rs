@@ -10,12 +10,30 @@ use crate::{
 };
 use ratatui::text::Line;
 use std::{
-    collections::VecDeque,
     fs,
     path::PathBuf,
+    sync::mpsc::{self, Receiver, TryRecvError},
+    thread,
     time::{Duration, Instant, SystemTime},
 };
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
+
+const MAX_FUZZY_PICKER_DIRS_VISITED: usize = 5_000;
+const MAX_FUZZY_PICKER_FILES_INDEXED: usize = 10_000;
+const MAX_FUZZY_PICKER_INDEX_DURATION: Duration = Duration::from_secs(5);
+const IGNORED_FUZZY_PICKER_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    ".venv",
+    "venv",
+    "vendor",
+    "var",
+    "dist",
+    "build",
+    ".next",
+    ".cache",
+];
 
 #[derive(Clone)]
 pub(crate) struct TocEntry {
@@ -116,7 +134,9 @@ impl FilePickerEntry {
     }
 
     fn file_name_component(path: &str) -> &str {
-        path.rsplit(std::path::MAIN_SEPARATOR).next().unwrap_or(path)
+        path.rsplit(std::path::MAIN_SEPARATOR)
+            .next()
+            .unwrap_or(path)
     }
 
     fn is_dir_like(&self) -> bool {
@@ -133,12 +153,48 @@ pub(crate) struct FilePickerState {
     match_positions: Vec<Vec<usize>>,
     index: usize,
     query: String,
+    truncation: Option<PickerIndexTruncation>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FilePickerMode {
     Browser,
     Fuzzy,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PendingPicker {
+    None,
+    Browser(PathBuf),
+    Fuzzy(PathBuf),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PickerIndexTruncation {
+    Directory,
+    File,
+    Time,
+}
+
+struct PickerIndexResult {
+    entries: Vec<FilePickerEntry>,
+    truncated: Option<PickerIndexTruncation>,
+}
+
+enum PickerLoadState {
+    Idle,
+    Loading {
+        mode: FilePickerMode,
+        dir: PathBuf,
+        started_at: Instant,
+        receiver: Receiver<std::io::Result<PickerIndexResult>>,
+        pending_result: Option<std::io::Result<PickerIndexResult>>,
+    },
+    Failed {
+        mode: FilePickerMode,
+        dir: PathBuf,
+        message: String,
+    },
 }
 
 pub(crate) struct ThemePickerState {
@@ -182,11 +238,17 @@ pub(crate) struct App {
     status_cache_key: Option<StatusCacheKey>,
     help_open: bool,
     file_picker: FilePickerState,
+    pending_picker: PendingPicker,
+    picker_load_state: PickerLoadState,
     theme_picker: ThemePickerState,
     render_width: usize,
 }
 
 impl App {
+    fn min_picker_loading_duration() -> Duration {
+        Duration::from_millis(500)
+    }
+
     fn is_markdown_path(path: &std::path::Path) -> bool {
         matches!(
             path.extension().and_then(|ext| ext.to_str()),
@@ -226,18 +288,69 @@ impl App {
         Ok(entries)
     }
 
+    fn is_ignored_fuzzy_picker_dir_name(name: &str) -> bool {
+        IGNORED_FUZZY_PICKER_DIRS.contains(&name)
+    }
+
+    fn fuzzy_directory_sort_key(root: &std::path::Path, path: &std::path::Path) -> (bool, String) {
+        let label = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+        (
+            !label
+                .split(std::path::MAIN_SEPARATOR)
+                .next()
+                .unwrap_or(&label)
+                .starts_with('.'),
+            label.to_lowercase(),
+        )
+    }
+
     fn build_fuzzy_file_picker_entries(
         dir: &std::path::Path,
-    ) -> std::io::Result<Vec<FilePickerEntry>> {
+    ) -> std::io::Result<PickerIndexResult> {
         let mut entries = Vec::new();
-        let mut queue = VecDeque::from([dir.to_path_buf()]);
+        let mut stack = vec![dir.to_path_buf()];
+        let started_at = Instant::now();
+        let mut dirs_visited = 0usize;
+        let mut files_indexed = 0usize;
+        let mut truncated = None;
 
-        while let Some(current_dir) = queue.pop_front() {
+        while let Some(current_dir) = stack.pop() {
+            if started_at.elapsed() >= MAX_FUZZY_PICKER_INDEX_DURATION {
+                truncated = Some(PickerIndexTruncation::Time);
+                break;
+            }
+            if dirs_visited >= MAX_FUZZY_PICKER_DIRS_VISITED {
+                truncated = Some(PickerIndexTruncation::Directory);
+                break;
+            }
+            dirs_visited += 1;
+
             let mut dirs = Vec::new();
             let mut files = Vec::new();
 
-            for entry in fs::read_dir(&current_dir)? {
-                let entry = entry?;
+            let read_dir = match fs::read_dir(&current_dir) {
+                Ok(read_dir) => read_dir,
+                Err(err) => {
+                    if current_dir == dir {
+                        return Err(err);
+                    }
+                    continue;
+                }
+            };
+
+            for entry in read_dir {
+                if started_at.elapsed() >= MAX_FUZZY_PICKER_INDEX_DURATION {
+                    truncated = Some(PickerIndexTruncation::Time);
+                    break;
+                }
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(_) => continue,
+                };
                 let path = entry.path();
                 let file_type = match entry.file_type() {
                     Ok(file_type) => file_type,
@@ -245,42 +358,43 @@ impl App {
                 };
 
                 if file_type.is_dir() {
+                    let name = entry.file_name();
+                    if Self::is_ignored_fuzzy_picker_dir_name(name.to_string_lossy().as_ref()) {
+                        continue;
+                    }
                     dirs.push(path);
                     continue;
                 }
 
                 if file_type.is_file() && Self::is_markdown_path(&path) {
+                    if files_indexed >= MAX_FUZZY_PICKER_FILES_INDEXED {
+                        truncated = Some(PickerIndexTruncation::File);
+                        break;
+                    }
                     let label = path
                         .strip_prefix(dir)
                         .unwrap_or(&path)
                         .display()
                         .to_string();
                     files.push(FilePickerEntry::new(label, path));
+                    files_indexed += 1;
                 }
             }
 
-            files.sort_by(|left, right| Self::fuzzy_entry_sort_key(left).cmp(&Self::fuzzy_entry_sort_key(right)));
-            dirs.sort_by_key(|path| {
-                let label = path
-                    .strip_prefix(dir)
-                    .unwrap_or(path)
-                    .display()
-                    .to_string();
-                (
-                    !label
-                        .split(std::path::MAIN_SEPARATOR)
-                        .next()
-                        .unwrap_or(&label)
-                        .starts_with('.'),
-                    label.to_lowercase(),
-                )
+            files.sort_by(|left, right| {
+                Self::fuzzy_entry_sort_key(left).cmp(&Self::fuzzy_entry_sort_key(right))
             });
+            dirs.sort_by_key(|path| Self::fuzzy_directory_sort_key(dir, path));
 
             entries.extend(files);
-            queue.extend(dirs);
+            if truncated.is_some() {
+                break;
+            }
+            dirs.reverse();
+            stack.extend(dirs);
         }
 
-        Ok(entries)
+        Ok(PickerIndexResult { entries, truncated })
     }
 
     fn fuzzy_entry_sort_key(entry: &FilePickerEntry) -> (bool, &str) {
@@ -329,7 +443,10 @@ impl App {
             .windows(2)
             .map(|window| window[1].saturating_sub(window[0]).saturating_sub(1))
             .sum::<usize>();
-        let len_diff = candidate.chars().count().saturating_sub(query.chars().count());
+        let len_diff = candidate
+            .chars()
+            .count()
+            .saturating_sub(query.chars().count());
         let prefix_bonus = usize::from(first == 0).saturating_mul(80);
         let boundary_bonus =
             usize::from(Self::is_match_boundary(candidate, first)).saturating_mul(40);
@@ -381,6 +498,16 @@ impl App {
         }
 
         let query = self.file_picker.query.trim().to_lowercase();
+        if query.is_empty() {
+            self.file_picker.filtered = (0..self.file_picker.entries.len()).collect();
+            self.file_picker.match_positions = vec![Vec::new(); self.file_picker.filtered.len()];
+            self.file_picker.index = self
+                .file_picker
+                .index
+                .min(self.file_picker.filtered.len().saturating_sub(1));
+            return;
+        }
+
         let mut filtered = self
             .file_picker
             .entries
@@ -449,14 +576,18 @@ impl App {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        Self::new_with_source(lines, toc, AppConfig {
-            filename,
-            source,
-            debug_input,
-            watch,
-            filepath,
-            last_file_state,
-        })
+        Self::new_with_source(
+            lines,
+            toc,
+            AppConfig {
+                filename,
+                source,
+                debug_input,
+                watch,
+                filepath,
+                last_file_state,
+            },
+        )
     }
 
     pub(crate) fn new_with_source(
@@ -512,7 +643,10 @@ impl App {
                 match_positions: Vec::new(),
                 index: 0,
                 query: String::new(),
+                truncation: None,
             },
+            pending_picker: PendingPicker::None,
+            picker_load_state: PickerLoadState::Idle,
             theme_picker: ThemePickerState {
                 open: false,
                 index: theme_preset_index(current_theme_preset()),
@@ -818,27 +952,250 @@ impl App {
         self.open_file_picker_with_mode(dir, FilePickerMode::Browser)
     }
 
+    #[cfg(test)]
     pub(crate) fn open_fuzzy_file_picker(&mut self, dir: PathBuf) -> bool {
         self.open_file_picker_with_mode(dir, FilePickerMode::Fuzzy)
     }
 
+    pub(crate) fn queue_file_picker(&mut self, dir: PathBuf) {
+        self.pending_picker = PendingPicker::Browser(dir);
+    }
+
+    pub(crate) fn queue_fuzzy_file_picker(&mut self, dir: PathBuf) {
+        self.pending_picker = PendingPicker::Fuzzy(dir);
+    }
+
+    pub(crate) fn has_pending_picker(&self) -> bool {
+        !matches!(self.pending_picker, PendingPicker::None)
+    }
+
+    pub(crate) fn start_pending_picker_loading(&mut self) -> bool {
+        if !self.has_pending_picker() || !matches!(self.picker_load_state, PickerLoadState::Idle) {
+            return false;
+        }
+
+        let pending = std::mem::replace(&mut self.pending_picker, PendingPicker::None);
+        let (mode, dir) = match pending {
+            PendingPicker::Browser(dir) => (FilePickerMode::Browser, dir),
+            PendingPicker::Fuzzy(dir) => (FilePickerMode::Fuzzy, dir),
+            PendingPicker::None => return false,
+        };
+
+        let worker_dir = dir.clone();
+        let (tx, rx) = mpsc::channel();
+        crate::runtime::debug_log(
+            self.debug_input,
+            &format!("picker_loading spawn mode={mode:?} dir={}", dir.display()),
+        );
+        thread::spawn(move || {
+            let result = match mode {
+                FilePickerMode::Browser => {
+                    Self::build_file_picker_entries(&worker_dir).map(|entries| PickerIndexResult {
+                        entries,
+                        truncated: None,
+                    })
+                }
+                FilePickerMode::Fuzzy => Self::build_fuzzy_file_picker_entries(&worker_dir),
+            };
+            let _ = tx.send(result);
+        });
+
+        self.picker_load_state = PickerLoadState::Loading {
+            mode,
+            dir,
+            started_at: Instant::now(),
+            receiver: rx,
+            pending_result: None,
+        };
+        true
+    }
+
+    pub(crate) fn is_picker_loading(&self) -> bool {
+        matches!(self.picker_load_state, PickerLoadState::Loading { .. })
+    }
+
+    pub(crate) fn is_picker_load_failed(&self) -> bool {
+        matches!(self.picker_load_state, PickerLoadState::Failed { .. })
+    }
+
+    pub(crate) fn pending_picker_mode(&self) -> Option<FilePickerMode> {
+        match &self.picker_load_state {
+            PickerLoadState::Loading { mode, .. } | PickerLoadState::Failed { mode, .. } => {
+                Some(*mode)
+            }
+            PickerLoadState::Idle => match self.pending_picker {
+                PendingPicker::Browser(..) => Some(FilePickerMode::Browser),
+                PendingPicker::Fuzzy(..) => Some(FilePickerMode::Fuzzy),
+                PendingPicker::None => None,
+            },
+        }
+    }
+
+    pub(crate) fn pending_picker_dir(&self) -> Option<&std::path::Path> {
+        match &self.picker_load_state {
+            PickerLoadState::Loading { dir, .. } | PickerLoadState::Failed { dir, .. } => {
+                Some(dir.as_path())
+            }
+            PickerLoadState::Idle => match &self.pending_picker {
+                PendingPicker::Browser(dir) | PendingPicker::Fuzzy(dir) => Some(dir.as_path()),
+                PendingPicker::None => None,
+            },
+        }
+    }
+
+    pub(crate) fn picker_load_error(&self) -> Option<&str> {
+        match &self.picker_load_state {
+            PickerLoadState::Failed { message, .. } => Some(message.as_str()),
+            PickerLoadState::Idle | PickerLoadState::Loading { .. } => None,
+        }
+    }
+
+    fn install_loaded_file_picker(
+        &mut self,
+        dir: PathBuf,
+        mode: FilePickerMode,
+        result: PickerIndexResult,
+    ) -> bool {
+        self.file_picker.open = true;
+        self.file_picker.mode = mode;
+        self.file_picker.dir = dir;
+        self.file_picker.entries = result.entries;
+        self.file_picker.query.clear();
+        self.file_picker.index = 0;
+        self.file_picker.truncation = if mode == FilePickerMode::Fuzzy {
+            result.truncated
+        } else {
+            None
+        };
+        self.refresh_file_picker_matches();
+        true
+    }
+
+    pub(crate) fn poll_picker_loading(&mut self) -> bool {
+        let state = std::mem::replace(&mut self.picker_load_state, PickerLoadState::Idle);
+        match state {
+            PickerLoadState::Loading {
+                mode,
+                dir,
+                started_at,
+                receiver,
+                mut pending_result,
+            } => {
+                if pending_result.is_none() {
+                    pending_result = match receiver.try_recv() {
+                        Ok(result) => {
+                            crate::runtime::debug_log(
+                                self.debug_input,
+                                &format!(
+                                    "picker_loading worker_finished mode={mode:?} dir={}",
+                                    dir.display()
+                                ),
+                            );
+                            Some(result)
+                        }
+                        Err(TryRecvError::Empty) => None,
+                        Err(TryRecvError::Disconnected) => Some(Err(std::io::Error::other(
+                            "Picker loading worker disconnected",
+                        ))),
+                    };
+                }
+
+                if started_at.elapsed() < Self::min_picker_loading_duration() {
+                    self.picker_load_state = PickerLoadState::Loading {
+                        mode,
+                        dir,
+                        started_at,
+                        receiver,
+                        pending_result,
+                    };
+                    return false;
+                }
+
+                match pending_result {
+                    Some(Ok(result)) => {
+                        crate::runtime::debug_log(
+                            self.debug_input,
+                            &format!(
+                                "picker_loading install mode={mode:?} dir={} entries={}",
+                                dir.display(),
+                                result.entries.len()
+                            ),
+                        );
+                        self.install_loaded_file_picker(dir, mode, result)
+                    }
+                    Some(Err(err)) => {
+                        crate::runtime::debug_log(
+                            self.debug_input,
+                            &format!(
+                                "picker_loading failed mode={mode:?} dir={} error={}",
+                                dir.display(),
+                                err
+                            ),
+                        );
+                        self.picker_load_state = PickerLoadState::Failed {
+                            mode,
+                            dir,
+                            message: err.to_string(),
+                        };
+                        true
+                    }
+                    None => {
+                        self.picker_load_state = PickerLoadState::Loading {
+                            mode,
+                            dir,
+                            started_at,
+                            receiver,
+                            pending_result: None,
+                        };
+                        false
+                    }
+                }
+            }
+            PickerLoadState::Failed { .. } => {
+                self.picker_load_state = state;
+                false
+            }
+            PickerLoadState::Idle => {
+                self.picker_load_state = PickerLoadState::Idle;
+                false
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn age_picker_loading_by(&mut self, duration: Duration) {
+        if let PickerLoadState::Loading {
+            mode,
+            dir,
+            started_at,
+            receiver,
+            pending_result,
+        } = std::mem::replace(&mut self.picker_load_state, PickerLoadState::Idle)
+        {
+            let adjusted = started_at.checked_sub(duration).unwrap_or(started_at);
+            self.picker_load_state = PickerLoadState::Loading {
+                mode,
+                dir,
+                started_at: adjusted,
+                receiver,
+                pending_result,
+            };
+        }
+    }
+
     fn open_file_picker_with_mode(&mut self, dir: PathBuf, mode: FilePickerMode) -> bool {
-        let entries = match mode {
-            FilePickerMode::Browser => Self::build_file_picker_entries(&dir),
+        let result = match mode {
+            FilePickerMode::Browser => {
+                Self::build_file_picker_entries(&dir).map(|entries| PickerIndexResult {
+                    entries,
+                    truncated: None,
+                })
+            }
             FilePickerMode::Fuzzy => Self::build_fuzzy_file_picker_entries(&dir),
         };
 
-        match entries {
-            Ok(entries) => {
-                self.file_picker.open = true;
-                self.file_picker.mode = mode;
-                self.file_picker.dir = dir;
-                self.file_picker.entries = entries;
-                self.file_picker.query.clear();
-                self.file_picker.index = 0;
-                self.refresh_file_picker_matches();
-                true
-            }
+        match result {
+            Ok(result) => self.install_loaded_file_picker(dir, mode, result),
             Err(_) => false,
         }
     }
@@ -881,6 +1238,10 @@ impl App {
 
     pub(crate) fn file_picker_query(&self) -> &str {
         &self.file_picker.query
+    }
+
+    pub(crate) fn file_picker_truncation(&self) -> Option<PickerIndexTruncation> {
+        self.file_picker.truncation
     }
 
     pub(crate) fn move_file_picker_up(&mut self) {

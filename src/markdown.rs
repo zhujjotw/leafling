@@ -312,7 +312,10 @@ fn highlight_code(
 fn block_prefix(in_bq: bool) -> Vec<Span<'static>> {
     let theme = &app_theme().markdown;
     if in_bq {
-        vec![Span::styled("▏ ", Style::default().fg(theme.blockquote_marker))]
+        vec![Span::styled(
+            "▏ ",
+            Style::default().fg(theme.blockquote_marker),
+        )]
     } else {
         vec![]
     }
@@ -419,7 +422,8 @@ fn push_wrapped_prefixed_lines(
             let token_width = display_width(token);
             if token_is_space {
                 let keep_styled_padding = style.bg.is_some();
-                if (*body_started || keep_styled_padding) && *current_width + token_width <= max_width
+                if (*body_started || keep_styled_padding)
+                    && *current_width + token_width <= max_width
                 {
                     current_prefix.push(Span::styled(std::mem::take(token), style));
                     *current_width += token_width;
@@ -552,12 +556,11 @@ fn flush_wrapped_spans(
     }
 }
 
-fn trim_paragraph_gap_before_block(
-    lines: &mut Vec<Line<'static>>,
-    last_block: LastBlock,
-) {
+fn trim_paragraph_gap_before_block(lines: &mut Vec<Line<'static>>, last_block: LastBlock) {
     if last_block == LastBlock::Paragraph
-        && lines.last().is_some_and(|line| line_plain_text(line).is_empty())
+        && lines
+            .last()
+            .is_some_and(|line| line_plain_text(line).is_empty())
     {
         lines.pop();
     }
@@ -684,9 +687,7 @@ fn inline_text_style(
     };
 
     if inline.in_strong {
-        style = style
-            .fg(theme.strong_text)
-            .add_modifier(Modifier::BOLD);
+        style = style.fg(theme.strong_text).add_modifier(Modifier::BOLD);
     }
     if inline.in_em {
         style = style.add_modifier(Modifier::ITALIC);
@@ -1095,9 +1096,15 @@ impl TableBuf {
                 .copied()
                 .enumerate()
                 .take(col_count)
-                .map(|(ci, width)| wrap_table_cell(row.get(ci).map(|s| s.as_str()).unwrap_or(""), width))
+                .map(|(ci, width)| {
+                    wrap_table_cell(row.get(ci).map(|s| s.as_str()).unwrap_or(""), width)
+                })
                 .collect();
-            let row_height = wrapped_cells.iter().map(|lines| lines.len()).max().unwrap_or(1);
+            let row_height = wrapped_cells
+                .iter()
+                .map(|lines| lines.len())
+                .max()
+                .unwrap_or(1);
 
             for line_idx in 0..row_height {
                 let mut spans = vec![Span::raw(ind), Span::styled("│", border)];
@@ -1223,7 +1230,8 @@ fn fit_table_widths(col_widths: &mut [usize], min_widths: &[usize], render_width
             .iter()
             .enumerate()
             .filter(|(idx, width)| **width > min_widths[*idx])
-            .max_by_key(|(_, width)| **width) else {
+            .max_by_key(|(_, width)| **width)
+        else {
             break;
         };
         col_widths[idx] -= 1;
@@ -1347,12 +1355,7 @@ pub(crate) fn parse_markdown_with_width(
         if table.is_some() && handle_table_event(&mut table, &ev, &mut lines, render_width) {
             continue;
         }
-        if handle_inline_style_event(
-            &ev,
-            &mut inline,
-            &mut spans,
-            theme_colors,
-        ) {
+        if handle_inline_style_event(&ev, &mut inline, &mut spans, theme_colors) {
             continue;
         }
 

@@ -1,15 +1,16 @@
-use crate::theme::{current_theme_preset, set_theme_preset, theme_preset_index};
-use crate::update::TestAsset;
-use crate::*;
 use crate::app::FileChange;
 use crate::markdown::{
     hash_str, parse_markdown, parse_markdown_with_width, read_file_state, resolve_syntax,
 };
+use crate::theme::{current_theme_preset, set_theme_preset, theme_preset_index};
+use crate::update::TestAsset;
+use crate::*;
 use crossterm::event::KeyEventKind;
 use ratatui::backend::TestBackend;
 use ratatui::{text::Line, widgets::Paragraph, Terminal};
 use std::{
     fs,
+    path::PathBuf,
     sync::{Mutex, MutexGuard},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -71,6 +72,14 @@ fn lock_theme_test_state() -> MutexGuard<'static, ()> {
     THEME_TEST_MUTEX.lock().unwrap()
 }
 
+fn unique_temp_dir(prefix: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!("{prefix}-{unique}"))
+}
+
 #[test]
 fn search_matches_across_span_boundaries() {
     let (ss, theme) = test_assets();
@@ -81,9 +90,7 @@ fn search_matches_across_span_boundaries() {
     app.run_search();
 
     assert_eq!(app.search_match_count(), 1);
-    assert!(
-        line_plain_text(app.line(app.search_matches()[0]).unwrap()).contains("hello world")
-    );
+    assert!(line_plain_text(app.line(app.search_matches()[0]).unwrap()).contains("hello world"));
 }
 
 #[test]
@@ -97,10 +104,9 @@ fn key_release_events_are_ignored() {
 fn stdin_read_is_rejected_when_over_limit() {
     let mut cursor = std::io::Cursor::new(vec![b'a'; 5]);
     let err = read_stdin_with_limit(&mut cursor, 4).unwrap_err();
-    assert!(
-        err.to_string()
-            .contains("stdin exceeds the maximum supported size")
-    );
+    assert!(err
+        .to_string()
+        .contains("stdin exceeds the maximum supported size"));
 }
 
 #[test]
@@ -151,11 +157,26 @@ fn parse_cli_accepts_picker_with_watch() {
 
 #[test]
 fn asset_name_matches_supported_release_targets() {
-    assert_eq!(asset_name_for_target("macos", "x86_64"), Some("leaf-macos-x86_64"));
-    assert_eq!(asset_name_for_target("macos", "aarch64"), Some("leaf-macos-arm64"));
-    assert_eq!(asset_name_for_target("linux", "x86_64"), Some("leaf-linux-x86_64"));
-    assert_eq!(asset_name_for_target("linux", "aarch64"), Some("leaf-linux-arm64"));
-    assert_eq!(asset_name_for_target("android", "aarch64"), Some("leaf-android-arm64"));
+    assert_eq!(
+        asset_name_for_target("macos", "x86_64"),
+        Some("leaf-macos-x86_64")
+    );
+    assert_eq!(
+        asset_name_for_target("macos", "aarch64"),
+        Some("leaf-macos-arm64")
+    );
+    assert_eq!(
+        asset_name_for_target("linux", "x86_64"),
+        Some("leaf-linux-x86_64")
+    );
+    assert_eq!(
+        asset_name_for_target("linux", "aarch64"),
+        Some("leaf-linux-arm64")
+    );
+    assert_eq!(
+        asset_name_for_target("android", "aarch64"),
+        Some("leaf-android-arm64")
+    );
     assert_eq!(
         asset_name_for_target("windows", "x86_64"),
         Some("leaf-windows-x86_64.exe")
@@ -229,13 +250,15 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  leaf-windows-x
 
 #[test]
 fn find_expected_checksum_rejects_missing_or_invalid_entries() {
-    let missing = find_expected_checksum("abcd  leaf-linux-x86_64\n", "leaf-macos-arm64")
-        .unwrap_err();
+    let missing =
+        find_expected_checksum("abcd  leaf-linux-x86_64\n", "leaf-macos-arm64").unwrap_err();
     assert!(missing.to_string().contains("does not contain"));
 
-    let invalid = find_expected_checksum("xyz  leaf-linux-x86_64\n", "leaf-linux-x86_64")
-        .unwrap_err();
-    assert!(invalid.to_string().contains("Invalid SHA256 checksum format"));
+    let invalid =
+        find_expected_checksum("xyz  leaf-linux-x86_64\n", "leaf-linux-x86_64").unwrap_err();
+    assert!(invalid
+        .to_string()
+        .contains("Invalid SHA256 checksum format"));
 }
 
 #[test]
@@ -554,7 +577,10 @@ fn paragraph_and_following_list_have_no_blank_gap() {
     let (ss, theme) = test_assets();
     let (lines, _) = parse_markdown("Intro paragraph\n\n- first\n- second\n", &ss, &theme);
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
-    let intro_idx = rendered.iter().position(|line| line == "Intro paragraph").unwrap();
+    let intro_idx = rendered
+        .iter()
+        .position(|line| line == "Intro paragraph")
+        .unwrap();
 
     assert_eq!(rendered[intro_idx + 1], "• first");
 }
@@ -570,7 +596,9 @@ fn wrapped_list_items_align_continuation_under_text() {
     assert!(rendered
         .iter()
         .any(|line| line.starts_with("  ") && line.contains("terminal is narrow")));
-    assert!(rendered.iter().any(|line| line.starts_with("8. Eighth item")));
+    assert!(rendered
+        .iter()
+        .any(|line| line.starts_with("8. Eighth item")));
     assert!(rendered
         .iter()
         .any(|line| line.starts_with("   ") && !line.starts_with("8. ")));
@@ -582,7 +610,10 @@ fn paragraph_and_following_code_block_have_no_blank_gap() {
     let src = "Intro paragraph\n\n```rs\nfn main() {}\n```\n";
     let (lines, _) = parse_markdown(src, &ss, &theme);
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
-    let intro_idx = rendered.iter().position(|line| line == "Intro paragraph").unwrap();
+    let intro_idx = rendered
+        .iter()
+        .position(|line| line == "Intro paragraph")
+        .unwrap();
 
     assert!(rendered[intro_idx + 1].starts_with("┌─ rs "));
 }
@@ -734,10 +765,19 @@ fn parse_theme_preset_supports_ocean_and_forest() {
 fn resolve_syntax_supports_common_language_aliases() {
     let ss = SyntaxSet::load_defaults_newlines();
 
-    assert_eq!(resolve_syntax("py", &ss).name, resolve_syntax("python", &ss).name);
-    assert_eq!(resolve_syntax("cpp", &ss).name, resolve_syntax("c++", &ss).name);
+    assert_eq!(
+        resolve_syntax("py", &ss).name,
+        resolve_syntax("python", &ss).name
+    );
+    assert_eq!(
+        resolve_syntax("cpp", &ss).name,
+        resolve_syntax("c++", &ss).name
+    );
     assert_eq!(resolve_syntax("json", &ss).name, "JSON");
-    assert_eq!(resolve_syntax("ps1", &ss).name, resolve_syntax("powershell", &ss).name);
+    assert_eq!(
+        resolve_syntax("ps1", &ss).name,
+        resolve_syntax("powershell", &ss).name
+    );
 }
 
 #[test]
@@ -858,7 +898,10 @@ fn file_picker_lists_dirs_then_markdown_files_only() {
     assert!(!labels.contains(&"ignore.txt"));
 
     let notes_idx = labels.iter().position(|label| *label == "notes/").unwrap();
-    let readme_idx = labels.iter().position(|label| *label == "README.md").unwrap();
+    let readme_idx = labels
+        .iter()
+        .position(|label| *label == "README.md")
+        .unwrap();
     assert!(notes_idx < readme_idx);
 
     let _ = fs::remove_dir_all(root);
@@ -908,7 +951,68 @@ fn fuzzy_file_picker_lists_markdown_files_from_subdirectories() {
 }
 
 #[test]
-fn fuzzy_file_picker_uses_breadth_first_order_with_hidden_first_per_level() {
+fn queued_fuzzy_picker_transitions_from_pending_to_loading_to_open() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("leaf-fuzzy-picker-queued-{unique}"));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(root.join("README.md"), "# Demo\n").unwrap();
+    fs::write(root.join("docs/guide.md"), "# Guide\n").unwrap();
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    app.queue_fuzzy_file_picker(root.clone());
+    assert!(app.has_pending_picker());
+    assert_eq!(
+        app.pending_picker_mode(),
+        Some(crate::app::FilePickerMode::Fuzzy)
+    );
+    assert_eq!(app.pending_picker_dir(), Some(root.as_path()));
+    assert!(!app.is_picker_loading());
+    assert!(app.start_pending_picker_loading());
+    assert!(app.is_picker_loading());
+    app.age_picker_loading_by(std::time::Duration::from_secs(1));
+    let mut opened = false;
+    for _ in 0..50 {
+        if app.poll_picker_loading() {
+            opened = app.is_file_picker_open();
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(opened);
+    assert!(app.is_file_picker_open());
+    assert!(app.is_fuzzy_file_picker());
+    assert!(!app.has_pending_picker());
+    assert!(!app.is_picker_loading());
+
+    let labels: Vec<_> = app
+        .file_picker_filtered_indices()
+        .iter()
+        .map(|idx| app.file_picker_entries()[*idx].label())
+        .collect();
+    assert!(labels.contains(&"README.md"));
+    assert!(labels.contains(&"docs/guide.md"));
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn fuzzy_file_picker_uses_depth_first_order_with_hidden_first() {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -956,7 +1060,7 @@ fn fuzzy_file_picker_uses_breadth_first_order_with_hidden_first_per_level() {
 }
 
 #[test]
-fn fuzzy_file_picker_uses_breadth_first_file_order() {
+fn fuzzy_file_picker_uses_depth_first_file_order() {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -992,7 +1096,54 @@ fn fuzzy_file_picker_uses_breadth_first_file_order() {
         .collect();
     assert_eq!(
         labels,
-        vec!["z-root.md", "a/a-child.md", "b/b-child.md", "a/deep/a-deep.md"]
+        vec![
+            "z-root.md",
+            "a/a-child.md",
+            "a/deep/a-deep.md",
+            "b/b-child.md"
+        ]
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn fuzzy_file_picker_keeps_depth_first_order_when_query_is_empty() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("leaf-fuzzy-picker-empty-query-{unique}"));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join(".nvm")).unwrap();
+    fs::create_dir_all(root.join("projects")).unwrap();
+    fs::write(root.join(".nvm/README.md"), "# Hidden Readme\n").unwrap();
+    fs::write(root.join(".nvm/ROADMAP.md"), "# Hidden Roadmap\n").unwrap();
+    fs::write(root.join("projects/README.md"), "# Project Readme\n").unwrap();
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    assert!(app.open_fuzzy_file_picker(root.clone()));
+
+    let labels: Vec<_> = app
+        .file_picker_filtered_indices()
+        .iter()
+        .map(|idx| app.file_picker_entries()[*idx].label())
+        .collect();
+    assert_eq!(
+        labels,
+        vec![".nvm/README.md", ".nvm/ROADMAP.md", "projects/README.md"]
     );
 
     let _ = fs::remove_dir_all(root);
@@ -1363,6 +1514,112 @@ fn fuzzy_file_picker_allows_q_in_query() {
 }
 
 #[test]
+fn fuzzy_file_picker_skips_ignored_technical_directories() {
+    let root = unique_temp_dir("leaf-fuzzy-picker-ignore");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join("target")).unwrap();
+    fs::create_dir_all(root.join("vendor")).unwrap();
+    fs::create_dir_all(root.join("var")).unwrap();
+    fs::create_dir_all(root.join(".notes")).unwrap();
+    fs::write(root.join(".git/ignored.md"), "# Ignored\n").unwrap();
+    fs::write(root.join("target/ignored.md"), "# Ignored\n").unwrap();
+    fs::write(root.join("vendor/ignored.md"), "# Ignored\n").unwrap();
+    fs::write(root.join("var/ignored.md"), "# Ignored\n").unwrap();
+    fs::write(root.join(".notes/kept.md"), "# Kept\n").unwrap();
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    assert!(app.open_fuzzy_file_picker(root.clone()));
+
+    let labels: Vec<_> = app
+        .file_picker_filtered_indices()
+        .iter()
+        .map(|idx| app.file_picker_entries()[*idx].label())
+        .collect();
+    assert_eq!(labels, vec![".notes/kept.md"]);
+    assert_eq!(app.file_picker_truncation(), None);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn fuzzy_file_picker_reports_directory_limit_truncation() {
+    let root = unique_temp_dir("leaf-fuzzy-picker-dir-limit");
+    let _ = fs::remove_dir_all(&root);
+    for idx in 0..5_050usize {
+        let dir = root.join(format!("nested-{idx:04}"));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("file-{idx:04}.md")), "# File\n").unwrap();
+    }
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    assert!(app.open_fuzzy_file_picker(root.clone()));
+    assert_eq!(
+        app.file_picker_truncation(),
+        Some(crate::app::PickerIndexTruncation::Directory)
+    );
+    assert!(!app.file_picker_entries().is_empty());
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn fuzzy_file_picker_reports_file_limit_truncation() {
+    let root = unique_temp_dir("leaf-fuzzy-picker-file-limit");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    for idx in 0..10_050usize {
+        fs::write(root.join(format!("file-{idx:05}.md")), "# File\n").unwrap();
+    }
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+
+    assert!(app.open_fuzzy_file_picker(root.clone()));
+    assert_eq!(
+        app.file_picker_truncation(),
+        Some(crate::app::PickerIndexTruncation::File)
+    );
+    assert_eq!(app.file_picker_entries().len(), 10_000);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn check_modified_detects_file_metadata_change() {
     let (ss, theme) = test_assets();
     let unique = SystemTime::now()
@@ -1492,7 +1749,10 @@ fn check_modified_reports_metadata_when_no_previous_file_state() {
     );
     app.set_last_content_hash(hash_str(&src));
 
-    assert!(matches!(app.check_modified(), Some(FileChange::Metadata(_))));
+    assert!(matches!(
+        app.check_modified(),
+        Some(FileChange::Metadata(_))
+    ));
 
     let _ = fs::remove_file(path);
 }
@@ -1518,7 +1778,10 @@ fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
 
     assert!(app.sync_render_width(10, &ss, &ts));
     assert!(!app.sync_render_width(10, &ss, &ts));
-    assert_eq!(app.total(), parse_markdown_with_width(source, &ss, &theme, 20).0.len());
+    assert_eq!(
+        app.total(),
+        parse_markdown_with_width(source, &ss, &theme, 20).0.len()
+    );
 }
 
 #[test]
@@ -1561,7 +1824,11 @@ fn code_block_inside_list_item_is_indented_and_has_no_blank_gap_before() {
         .position(|line| line.contains("<code goes here>"))
         .expect("missing code line");
 
-    assert_eq!(header_idx, item_idx + 1, "expected no blank gap before code block");
+    assert_eq!(
+        header_idx,
+        item_idx + 1,
+        "expected no blank gap before code block"
+    );
     assert!(rendered[header_idx].starts_with("  "));
     assert!(rendered[code_idx].starts_with("  "));
 }

@@ -63,8 +63,13 @@ pub(crate) fn run_update() -> Result<()> {
 }
 
 fn current_asset_name() -> Result<&'static str> {
-    asset_name_for_target(std::env::consts::OS, std::env::consts::ARCH)
-        .ok_or_else(|| anyhow::anyhow!("Unsupported platform: {} {}", std::env::consts::OS, std::env::consts::ARCH))
+    asset_name_for_target(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unsupported platform: {} {}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        )
+    })
 }
 
 pub(crate) fn asset_name_for_target(os: &str, arch: &str) -> Option<&'static str> {
@@ -191,7 +196,10 @@ fn http_client() -> Result<Client> {
     Ok(client)
 }
 
-fn validate_download_response(status: reqwest::StatusCode, content_length: Option<u64>) -> Result<Option<u64>> {
+fn validate_download_response(
+    status: reqwest::StatusCode,
+    content_length: Option<u64>,
+) -> Result<Option<u64>> {
     if status == reqwest::StatusCode::FORBIDDEN {
         bail!("Release asset download was forbidden or rate-limited");
     }
@@ -252,8 +260,12 @@ pub(crate) fn validate_sha256_hex(value: &str) -> Result<()> {
 }
 
 fn verify_download_checksum(path: &Path, expected_checksum: &str) -> Result<()> {
-    let bytes = fs::read(path)
-        .with_context(|| format!("Cannot read downloaded asset for checksum: {}", path.display()))?;
+    let bytes = fs::read(path).with_context(|| {
+        format!(
+            "Cannot read downloaded asset for checksum: {}",
+            path.display()
+        )
+    })?;
     let actual_checksum = format!("{:x}", Sha256::digest(&bytes));
 
     if actual_checksum != expected_checksum {
@@ -275,7 +287,12 @@ fn temp_download_path(current_exe: &Path) -> PathBuf {
 #[cfg(unix)]
 fn replace_binary(current_exe: &Path, downloaded_path: &Path) -> Result<()> {
     let permissions = fs::metadata(current_exe)
-        .with_context(|| format!("Cannot read current binary metadata: {}", current_exe.display()))?
+        .with_context(|| {
+            format!(
+                "Cannot read current binary metadata: {}",
+                current_exe.display()
+            )
+        })?
         .permissions();
     fs::set_permissions(downloaded_path, permissions).with_context(|| {
         format!(
@@ -283,12 +300,8 @@ fn replace_binary(current_exe: &Path, downloaded_path: &Path) -> Result<()> {
             downloaded_path.display()
         )
     })?;
-    fs::rename(downloaded_path, current_exe).with_context(|| {
-        format!(
-            "Cannot replace current binary at {}",
-            current_exe.display()
-        )
-    })?;
+    fs::rename(downloaded_path, current_exe)
+        .with_context(|| format!("Cannot replace current binary at {}", current_exe.display()))?;
     Ok(())
 }
 

@@ -8,8 +8,8 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Wrap,
+        Block, Borders, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Wrap,
     },
     Frame,
 };
@@ -24,8 +24,7 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(area);
 
-    let (toc_area, content_area): (Option<Rect>, Rect) =
-        if app.is_toc_visible() && app.has_toc() {
+    let (toc_area, content_area): (Option<Rect>, Rect) = if app.is_toc_visible() && app.has_toc() {
         let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(30), Constraint::Min(0)])
@@ -45,6 +44,8 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
 
     if app.is_help_open() {
         render_help_popup(f);
+    } else if app.is_picker_loading() || app.is_picker_load_failed() {
+        render_picker_loading(f, app);
     } else if app.is_file_picker_open() {
         render_file_picker(f, app);
     } else if app.is_theme_picker_open() {
@@ -319,10 +320,7 @@ fn render_help_popup(f: &mut Frame) {
         .fg(theme.markdown.heading_2)
         .add_modifier(Modifier::BOLD);
     let lines = vec![
-        Line::from(vec![Span::styled(
-            version_text().to_string(),
-            title_style,
-        )]),
+        Line::from(vec![Span::styled(version_text().to_string(), title_style)]),
         Line::from(vec![Span::styled(
             "Keyboard shortcuts",
             Style::default().fg(theme.ui.status_shortcut_fg),
@@ -351,10 +349,7 @@ fn render_help_popup(f: &mut Frame) {
             Span::styled("top/bottom", text_style),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "Actions",
-            section_style,
-        )]),
+        Line::from(vec![Span::styled("Actions", section_style)]),
         Line::from(vec![
             Span::styled("r          ", key_style),
             Span::styled("reload (watch)", text_style),
@@ -374,10 +369,7 @@ fn render_help_popup(f: &mut Frame) {
             Span::styled("theme picker", text_style),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "Esc or ? to close",
-            footer_style,
-        )]),
+        Line::from(vec![Span::styled("Esc or ? to close", footer_style)]),
     ];
 
     f.render_widget(Clear, area);
@@ -480,11 +472,21 @@ fn render_file_picker(f: &mut Frame, app: &App) {
     let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
     let inner_height = area.height.saturating_sub(2) as usize;
     let header_lines = if app.is_fuzzy_file_picker() { 4 } else { 3 };
-    let max_visible_slots = if app.is_fuzzy_file_picker() { 12 } else { 13 };
-    let visible_slots = inner_height
-        .saturating_sub(header_lines + 1)
-        .min(max_visible_slots);
     let total = app.file_picker_filtered_indices().len();
+    let truncation_message = picker_truncation_message(app.file_picker_truncation());
+    let max_visible_slots = if app.is_fuzzy_file_picker() {
+        if truncation_message.is_some() {
+            11
+        } else {
+            12
+        }
+    } else {
+        13
+    };
+    let reserved_footer_lines = if truncation_message.is_some() { 3 } else { 2 };
+    let visible_slots = inner_height
+        .saturating_sub(header_lines + reserved_footer_lines)
+        .min(max_visible_slots);
     let start = if visible_slots == 0 || app.file_picker_index() < visible_slots {
         0
     } else {
@@ -554,7 +556,12 @@ fn render_file_picker(f: &mut Frame, app: &App) {
             };
             let marker = if selected { "▸ " } else { "  " };
             let label_spans = if app.is_fuzzy_file_picker() {
-                highlighted_picker_label(entry.label(), app.file_picker_match_positions(actual_idx), bg, selected)
+                highlighted_picker_label(
+                    entry.label(),
+                    app.file_picker_match_positions(actual_idx),
+                    bg,
+                    selected,
+                )
             } else {
                 vec![Span::styled(
                     entry.label().to_string(),
@@ -584,10 +591,23 @@ fn render_file_picker(f: &mut Frame, app: &App) {
         }
     }
 
-    while lines.len() < inner_height.saturating_sub(2) {
+    while lines.len() < inner_height.saturating_sub(reserved_footer_lines) {
         lines.push(Line::from(""));
     }
-    lines.push(Line::from(""));
+
+    if let Some(message) = truncation_message {
+        lines.push(Line::from(vec![Span::styled(
+            "",
+            Style::default().fg(theme.ui.toc_primary_inactive),
+        )]));
+        lines.push(Line::from(vec![Span::styled(
+            message,
+            Style::default().fg(theme.markdown.heading_3),
+        )]));
+    } else {
+        lines.push(Line::from(""));
+    }
+
     lines.push(Line::from(vec![Span::styled(
         if app.is_fuzzy_file_picker() {
             "↑/↓ move • enter open • type filter • esc clear • ctrl+c quit"
@@ -609,6 +629,102 @@ fn render_file_picker(f: &mut Frame, app: &App) {
         ),
         area,
     );
+}
+
+fn render_picker_loading(f: &mut Frame, app: &App) {
+    let theme = app_theme();
+    let area = centered_rect(78, 20, f.area());
+    let title_style = Style::default()
+        .fg(theme.markdown.heading_2)
+        .add_modifier(Modifier::BOLD);
+    let section_style = Style::default().fg(theme.ui.status_shortcut_fg);
+    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+    let is_failed = app.is_picker_load_failed();
+    let is_fuzzy = matches!(
+        app.pending_picker_mode(),
+        Some(crate::app::FilePickerMode::Fuzzy)
+    );
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let message = if is_failed {
+        app.picker_load_error().unwrap_or("Failed to load files")
+    } else {
+        "Indexing markdown files..."
+    };
+
+    let mut lines = vec![
+        Line::from(vec![Span::styled("Open a Markdown file", title_style)]),
+        Line::from(vec![
+            Span::styled("Dir: ", section_style),
+            Span::styled(
+                app.pending_picker_dir()
+                    .map(|dir| dir.display().to_string())
+                    .unwrap_or_else(|| ".".to_string()),
+                Style::default().fg(theme.ui.toc_primary_inactive),
+            ),
+        ]),
+    ];
+
+    if is_fuzzy {
+        lines.push(Line::from(vec![
+            Span::styled("Query: ", section_style),
+            Span::styled(
+                " type to filter ".to_string(),
+                Style::default()
+                    .fg(theme.ui.toc_primary_inactive)
+                    .bg(theme.markdown.inline_code_bg),
+            ),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        message,
+        Style::default().fg(theme.ui.toc_primary_inactive),
+    )]));
+
+    while lines.len() < inner_height.saturating_sub(2) {
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        if is_fuzzy {
+            "↑/↓ move • enter open • type filter • esc clear • ctrl+c quit"
+        } else {
+            "enter open • backspace up • ctrl+c quit"
+        },
+        footer_style.bg(theme.ui.toc_bg),
+    )]));
+
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title("─ Files ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.ui.toc_border))
+                .style(Style::default().bg(theme.ui.toc_bg))
+                .padding(Padding::new(1, 1, 0, 0)),
+        ),
+        area,
+    );
+}
+
+fn picker_truncation_message(
+    truncation: Option<crate::app::PickerIndexTruncation>,
+) -> Option<&'static str> {
+    match truncation {
+        Some(crate::app::PickerIndexTruncation::Directory) => {
+            Some("Indexing limited: directory limit reached")
+        }
+        Some(crate::app::PickerIndexTruncation::File) => {
+            Some("Indexing limited: file limit reached")
+        }
+        Some(crate::app::PickerIndexTruncation::Time) => {
+            Some("Indexing limited: time limit reached")
+        }
+        None => None,
+    }
 }
 
 fn highlighted_picker_label(
@@ -639,7 +755,10 @@ fn highlighted_picker_label(
         return vec![Span::styled(label.to_string(), default_style)];
     }
 
-    let match_set = match_positions.iter().copied().collect::<std::collections::BTreeSet<_>>();
+    let match_set = match_positions
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
     let mut spans = Vec::new();
     let mut buffer = String::new();
     let mut current_matched = None;
@@ -728,7 +847,7 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
     }
 
     let mut sections = vec![left_section, status_shortcuts_section(app, bar_bg)];
-    if !app.is_file_picker_open() {
+    if !app.is_file_picker_open() && !app.is_picker_loading() {
         sections.push(status_percent_section(pct, bar_bg));
     }
 

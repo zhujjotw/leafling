@@ -9,7 +9,7 @@ use std::{
     fs::OpenOptions,
     io,
     io::Write,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
@@ -21,13 +21,42 @@ pub(crate) fn debug_log(enabled: bool, message: &str) {
     if !enabled {
         return;
     }
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
         .open("leaf-debug.log")
     {
-        let _ = writeln!(file, "{message}");
+        let _ = writeln!(file, "[{timestamp}] {message}");
     }
+}
+
+pub(crate) fn prepare_initial_picker_state(
+    area_width: usize,
+    app: &mut App,
+    ss: &SyntaxSet,
+    themes: &ThemeSet,
+) -> Result<()> {
+    debug_log(
+        app.debug_input_enabled(),
+        &format!("prepare_initial_picker_state start area_width={area_width}"),
+    );
+    sync_render_width_for_app(area_width, app, ss, themes);
+    if app.has_pending_picker() && !app.is_picker_loading() {
+        let _ = app.start_pending_picker_loading();
+    }
+    debug_log(
+        app.debug_input_enabled(),
+        &format!(
+            "prepare_initial_picker_state end picker_loading={} pending_picker={}",
+            app.is_picker_loading(),
+            app.has_pending_picker()
+        ),
+    );
+    Ok(())
 }
 
 pub(crate) fn run(
@@ -35,16 +64,22 @@ pub(crate) fn run(
     app: &mut App,
     ss: &SyntaxSet,
     themes: &ThemeSet,
+    initial_draw_done: bool,
 ) -> Result<()> {
     const WATCH_INTERVAL: Duration = Duration::from_millis(250);
     const FLASH_DURATION: Duration = Duration::from_millis(1500);
     const MOUSE_SCROLL_STEP: usize = 3;
     const RESIZE_DEBOUNCE: Duration = Duration::from_millis(120);
-    let mut needs_redraw = true;
+    const PICKER_LOAD_POLL_INTERVAL: Duration = Duration::from_millis(50);
+    let mut needs_redraw = !initial_draw_done;
     let mut pending_resize: Option<Instant> = None;
     sync_render_width(terminal, app, ss, themes)?;
 
     loop {
+        if app.poll_picker_loading() {
+            needs_redraw = true;
+        }
+
         if needs_redraw {
             terminal.draw(|f| ui(f, app))?;
             needs_redraw = false;
@@ -58,11 +93,20 @@ pub(crate) fn run(
             let elapsed = started.elapsed();
             (elapsed < RESIZE_DEBOUNCE).then_some(RESIZE_DEBOUNCE - elapsed)
         });
-        let poll_timeout = [if app.is_watch_enabled() {
-            Some(WATCH_INTERVAL)
-        } else {
-            None
-        }, flash_timeout, resize_timeout]
+        let poll_timeout = [
+            if app.is_watch_enabled() {
+                Some(WATCH_INTERVAL)
+            } else {
+                None
+            },
+            if app.is_picker_loading() {
+                Some(PICKER_LOAD_POLL_INTERVAL)
+            } else {
+                None
+            },
+            flash_timeout,
+            resize_timeout,
+        ]
         .into_iter()
         .flatten()
         .min()
@@ -100,6 +144,21 @@ pub(crate) fn run(
                             KeyCode::Esc | KeyCode::Char('?') => app.close_help(),
                             _ => state_changed = false,
                         }
+                    } else if app.is_picker_loading() {
+                        match key.code {
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                break;
+                            }
+                            _ => state_changed = false,
+                        }
+                    } else if app.is_picker_load_failed() {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Enter => break,
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                break;
+                            }
+                            _ => state_changed = false,
+                        }
                     } else if app.is_file_picker_open() {
                         match key.code {
                             KeyCode::Char('?') => app.open_help(),
@@ -116,11 +175,11 @@ pub(crate) fn run(
                             KeyCode::Down if app.is_fuzzy_file_picker() => {
                                 app.move_file_picker_down()
                             }
-                            KeyCode::Up if app.is_fuzzy_file_picker() => {
-                                app.move_file_picker_up()
-                            }
+                            KeyCode::Up if app.is_fuzzy_file_picker() => app.move_file_picker_up(),
                             KeyCode::Esc => {
-                                if app.is_browser_file_picker() || app.file_picker_query().is_empty() {
+                                if app.is_browser_file_picker()
+                                    || app.file_picker_query().is_empty()
+                                {
                                     state_changed = false;
                                 } else {
                                     app.clear_file_picker_query();
@@ -212,9 +271,7 @@ pub(crate) fn run(
                             KeyCode::Char('r') if app.is_watch_enabled() => {
                                 app.request_reload(ss, themes);
                             }
-                            KeyCode::Char('f')
-                                if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                            {
+                            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 app.begin_search()
                             }
                             KeyCode::Char('/') => app.begin_search(),
@@ -300,13 +357,27 @@ fn sync_render_width(
     themes: &ThemeSet,
 ) -> Result<bool> {
     let area = terminal.size()?;
+    Ok(sync_render_width_for_app(
+        area.width as usize,
+        app,
+        ss,
+        themes,
+    ))
+}
+
+fn sync_render_width_for_app(
+    area_width: usize,
+    app: &mut App,
+    ss: &SyntaxSet,
+    themes: &ThemeSet,
+) -> bool {
     let content_width = if app.is_toc_visible() && app.has_toc() {
-        area.width.saturating_sub(30)
+        area_width.saturating_sub(30)
     } else {
-        area.width
+        area_width
     };
     let effective_width = content_width
-        .saturating_sub(CONTENT_HORIZONTAL_PADDING.saturating_mul(2))
-        .saturating_sub(SCROLLBAR_WIDTH);
-    Ok(app.sync_render_width(effective_width as usize, ss, themes))
+        .saturating_sub(CONTENT_HORIZONTAL_PADDING as usize * 2)
+        .saturating_sub(SCROLLBAR_WIDTH as usize);
+    app.sync_render_width(effective_width, ss, themes)
 }
