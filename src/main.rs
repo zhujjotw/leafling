@@ -5,6 +5,8 @@ use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 mod app;
 mod cli;
+#[allow(dead_code)]
+mod editor;
 mod markdown;
 mod render;
 mod runtime;
@@ -24,6 +26,8 @@ use update::run_update;
 
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
+#[cfg(test)]
+pub(crate) use editor::{binary_name, classify, resolve_editor, split_editor_cmd, EditorKind};
 #[cfg(test)]
 pub(crate) use markdown::toc::{
     normalize_toc, should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry,
@@ -83,8 +87,10 @@ fn main() -> Result<()> {
         debug_input,
         file_arg,
         theme,
+        editor: cli_editor,
         ..
     } = options;
+    let _ = cli_editor;
     runtime::debug_log(debug_input, &format!("main start args={args:?}"));
     set_theme_preset(theme);
 
