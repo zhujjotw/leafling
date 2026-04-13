@@ -5,7 +5,6 @@ use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 mod app;
 mod cli;
-#[allow(dead_code)]
 mod editor;
 mod markdown;
 mod render;
@@ -90,7 +89,7 @@ fn main() -> Result<()> {
         editor: cli_editor,
         ..
     } = options;
-    let _ = cli_editor;
+    let resolved_editor = editor::resolve_editor(cli_editor.as_deref());
     runtime::debug_log(debug_input, &format!("main start args={args:?}"));
     set_theme_preset(theme);
 
@@ -172,6 +171,7 @@ fn main() -> Result<()> {
         },
     );
     app.set_last_content_hash(last_content_hash);
+    app.set_editor_config(Some(resolved_editor));
     if let Some(dir) = open_browser_picker_dir {
         app.queue_file_picker(dir);
     }

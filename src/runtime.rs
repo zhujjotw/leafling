@@ -1,5 +1,9 @@
 use crate::{
-    app::{App, FileChange},
+    app::{App, EditorFlash, FileChange},
+    editor::{
+        self, check_termux_external_apps, classify, open_in_editor, split_editor_cmd, EditorKind,
+        EditorResult, TerminalEmulator,
+    },
     render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
 use anyhow::Result;
@@ -89,6 +93,10 @@ pub(crate) fn run(
             let elapsed = started.elapsed();
             (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
         });
+        let editor_flash_timeout = app.editor_flash().and_then(|(_, started)| {
+            let elapsed = started.elapsed();
+            (elapsed < EDITOR_FLASH_DURATION).then_some(EDITOR_FLASH_DURATION - elapsed)
+        });
         let resize_timeout = pending_resize.and_then(|started| {
             let elapsed = started.elapsed();
             (elapsed < RESIZE_DEBOUNCE).then_some(RESIZE_DEBOUNCE - elapsed)
@@ -105,6 +113,7 @@ pub(crate) fn run(
                 None
             },
             flash_timeout,
+            editor_flash_timeout,
             resize_timeout,
         ]
         .into_iter()
@@ -277,6 +286,9 @@ pub(crate) fn run(
                             KeyCode::Char('/') => app.begin_search(),
                             KeyCode::Char('n') => app.next_match(),
                             KeyCode::Char('N') => app.prev_match(),
+                            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                handle_open_in_editor(terminal, app, ss, themes)?;
+                            }
                             KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
                                 if let Some(n) = c.to_digit(10) {
                                     app.jump_to_toc(n as usize - 1);
@@ -345,6 +357,92 @@ pub(crate) fn run(
                     needs_redraw = true;
                 }
             }
+        }
+
+        if let Some((_, started)) = app.editor_flash() {
+            if started.elapsed() >= EDITOR_FLASH_DURATION {
+                app.clear_editor_flash();
+                needs_redraw = true;
+            }
+        }
+    }
+    Ok(())
+}
+
+const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(2000);
+
+fn handle_open_in_editor(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    ss: &SyntaxSet,
+    themes: &ThemeSet,
+) -> Result<()> {
+    let filepath = match app.filepath() {
+        Some(p) => p.to_path_buf(),
+        None => {
+            app.set_editor_flash(EditorFlash::NoFile);
+            return Ok(());
+        }
+    };
+
+    let editor_cmd = match app.editor_config() {
+        Some(e) => e.to_string(),
+        None => {
+            app.set_editor_flash(EditorFlash::EditorNotFound("no editor configured".into()));
+            return Ok(());
+        }
+    };
+
+    let emulator = editor::detect_terminal_emulator();
+    let kind = classify(&editor_cmd);
+
+    if emulator == TerminalEmulator::Termux && kind == EditorKind::Terminal {
+        let allowed = match app.termux_external_apps() {
+            Some(v) => v,
+            None => {
+                let v = check_termux_external_apps();
+                app.set_termux_external_apps(v);
+                v
+            }
+        };
+        if !allowed {
+            app.set_editor_flash(EditorFlash::TermuxPermission);
+        }
+    }
+
+    let effective_emulator =
+        if emulator == TerminalEmulator::Termux && app.termux_external_apps() == Some(false) {
+            TerminalEmulator::Unknown
+        } else {
+            emulator
+        };
+
+    match open_in_editor(&editor_cmd, &filepath, kind, &effective_emulator) {
+        Ok(EditorResult::Opened) => {
+            let name = editor::binary_name(&editor_cmd).to_string();
+            app.set_editor_flash(EditorFlash::Opened(name));
+        }
+        Ok(EditorResult::NeedsSameTerminal) => {
+            let (bin, args) = split_editor_cmd(&editor_cmd);
+            crossterm::terminal::disable_raw_mode()?;
+            crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
+
+            let status = std::process::Command::new(bin)
+                .args(&args)
+                .arg(&filepath)
+                .status();
+
+            crossterm::terminal::enable_raw_mode()?;
+            crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+            terminal.clear()?;
+            app.reload(ss, themes);
+
+            if let Err(e) = status {
+                app.set_editor_flash(EditorFlash::EditorNotFound(format!("{bin}: {e}")));
+            }
+        }
+        Err(msg) => {
+            app.set_editor_flash(EditorFlash::EditorNotFound(msg));
         }
     }
     Ok(())

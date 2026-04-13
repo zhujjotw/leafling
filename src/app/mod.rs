@@ -22,6 +22,14 @@ mod fuzzy;
 pub(crate) use file_picker::{FilePickerMode, FilePickerState, PickerIndexTruncation};
 use file_picker::{PendingPicker, PickerLoadState};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum EditorFlash {
+    Opened(String),
+    NoFile,
+    EditorNotFound(String),
+    TermuxPermission,
+}
+
 pub(super) mod theme_picker;
 pub(crate) use theme_picker::ThemePickerState;
 
@@ -49,6 +57,7 @@ pub(crate) struct StatusCacheKey {
     search_idx: usize,
     watch: bool,
     flash_active: bool,
+    editor_flash_active: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -88,6 +97,9 @@ pub(crate) struct App {
     pub(super) picker_load_state: PickerLoadState,
     pub(super) theme_picker: ThemePickerState,
     pub(super) render_width: usize,
+    pub(super) editor_config: Option<String>,
+    pub(super) editor_flash: Option<(EditorFlash, Instant)>,
+    pub(super) termux_external_apps: Option<bool>,
 }
 
 impl App {
@@ -193,6 +205,9 @@ impl App {
                 preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
             },
             render_width: 80,
+            editor_config: None,
+            editor_flash: None,
+            termux_external_apps: None,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -354,6 +369,11 @@ impl App {
                 .reload_flash
                 .map(|t| t.elapsed() < Duration::from_millis(1500))
                 .unwrap_or(false),
+            editor_flash_active: self
+                .editor_flash
+                .as_ref()
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(2000))
+                .unwrap_or(false),
         };
 
         if self.status_cache_key.as_ref() == Some(&cache_key) {
@@ -389,6 +409,38 @@ impl App {
 
     pub(crate) fn reload_flash_started(&self) -> Option<Instant> {
         self.reload_flash
+    }
+
+    pub(crate) fn set_editor_config(&mut self, editor: Option<String>) {
+        self.editor_config = editor;
+    }
+
+    pub(crate) fn editor_config(&self) -> Option<&str> {
+        self.editor_config.as_deref()
+    }
+
+    pub(crate) fn set_editor_flash(&mut self, flash: EditorFlash) {
+        self.editor_flash = Some((flash, Instant::now()));
+    }
+
+    pub(crate) fn editor_flash(&self) -> Option<&(EditorFlash, Instant)> {
+        self.editor_flash.as_ref()
+    }
+
+    pub(crate) fn clear_editor_flash(&mut self) {
+        self.editor_flash = None;
+    }
+
+    pub(crate) fn termux_external_apps(&self) -> Option<bool> {
+        self.termux_external_apps
+    }
+
+    pub(crate) fn set_termux_external_apps(&mut self, value: bool) {
+        self.termux_external_apps = Some(value);
+    }
+
+    pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
+        self.filepath.as_deref()
     }
 
     pub(crate) fn set_last_file_state(&mut self, state: FileState) {

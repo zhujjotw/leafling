@@ -14,7 +14,7 @@ use super::centered_rect;
 
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(56, 16, f.area());
+    let area = centered_rect(56, 17, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -74,6 +74,9 @@ pub(super) fn render_help_popup(f: &mut Frame) {
         Line::from(vec![
             Span::styled("T          ", key_style),
             Span::styled("theme picker", text_style),
+            Span::raw("      "),
+            Span::styled("Ctrl+E     ", key_style),
+            Span::styled("edit", text_style),
         ]),
         Line::from(""),
         Line::from(vec![Span::styled("Esc or ? to close", footer_style)]),
