@@ -25,7 +25,7 @@ use update::run_update;
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
 #[cfg(test)]
-pub(crate) use app::{
+pub(crate) use markdown::toc::{
     normalize_toc, should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry,
 };
 #[cfg(test)]
