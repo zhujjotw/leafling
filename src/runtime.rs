@@ -382,7 +382,7 @@ fn handle_open_in_editor(
     themes: &ThemeSet,
 ) -> Result<()> {
     let filepath = match app.filepath() {
-        Some(p) => p.to_path_buf(),
+        Some(p) => p.canonicalize().unwrap_or_else(|_| p.to_path_buf()),
         None => {
             app.set_editor_flash(EditorFlash::NoFile);
             return Ok(());

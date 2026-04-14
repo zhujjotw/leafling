@@ -543,7 +543,7 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
 
         let mk_line = |entry: &crate::editor::EditorEntry, idx: usize| -> Line<'static> {
             let is_selected = idx == selected;
-            let is_current = current_editor == Some(entry.name.as_str());
+            let is_current = current_editor == Some(crate::editor::binary_name(&entry.command));
             let bg = if is_selected {
                 theme.ui.toc_active_bg
             } else {

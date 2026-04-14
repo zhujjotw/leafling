@@ -17,7 +17,7 @@ pub(crate) fn binary_name(editor_cmd: &str) -> &str {
 pub(crate) fn classify(editor_cmd: &str) -> EditorKind {
     match binary_name(editor_cmd) {
         "code" | "codium" | "subl" | "gedit" | "kate" | "mousepad" | "notepad.exe"
-        | "notepad++" | "zed" => EditorKind::Gui,
+        | "notepad++" | "zed" | "termux-open" => EditorKind::Gui,
         _ => EditorKind::Terminal,
     }
 }
@@ -32,6 +32,7 @@ pub(crate) fn split_editor_cmd(cmd: &str) -> (&str, Vec<&str>) {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct EditorEntry {
     pub(crate) name: String,
+    pub(crate) command: String,
     pub(crate) kind: EditorKind,
 }
 
@@ -77,14 +78,27 @@ pub(crate) fn which(bin: &str) -> Option<PathBuf> {
 
 pub(crate) fn scan_available_editors() -> Vec<EditorEntry> {
     let mut found = Vec::new();
+    let is_termux = std::env::var("TERMUX_VERSION").is_ok();
 
     for &(name, kind) in KNOWN_EDITORS {
+        if is_termux && kind == EditorKind::Gui {
+            continue;
+        }
         if which(name).is_some() {
             found.push(EditorEntry {
                 name: name.to_string(),
+                command: name.to_string(),
                 kind,
             });
         }
+    }
+
+    if is_termux && which("termux-open").is_some() {
+        found.push(EditorEntry {
+            name: "intent".to_string(),
+            command: "termux-open --chooser".to_string(),
+            kind: EditorKind::Gui,
+        });
     }
 
     found.sort_by_key(|e| match e.kind {
@@ -131,25 +145,25 @@ pub(crate) fn detect_terminal_emulator() -> TerminalEmulator {
 }
 
 pub(crate) fn resolve_editor(cli_editor: Option<&str>) -> String {
-    if let Some(e) = cli_editor {
-        return e.to_string();
+    let raw = if let Some(e) = cli_editor {
+        e.to_string()
+    } else if let Some(e) = std::env::var("LEAF_EDITOR").ok().filter(|s| !s.is_empty()) {
+        e
+    } else if let Some(e) = std::env::var("VISUAL").ok().filter(|s| !s.is_empty()) {
+        e
+    } else if let Some(e) = std::env::var("EDITOR").ok().filter(|s| !s.is_empty()) {
+        e
+    } else {
+        platform_fallback_editor().to_string()
+    };
+    expand_editor_alias(&raw)
+}
+
+fn expand_editor_alias(editor: &str) -> String {
+    match editor.trim() {
+        "intent" => "termux-open --chooser".to_string(),
+        _ => editor.to_string(),
     }
-    if let Ok(e) = std::env::var("LEAF_EDITOR") {
-        if !e.is_empty() {
-            return e;
-        }
-    }
-    if let Ok(e) = std::env::var("VISUAL") {
-        if !e.is_empty() {
-            return e;
-        }
-    }
-    if let Ok(e) = std::env::var("EDITOR") {
-        if !e.is_empty() {
-            return e;
-        }
-    }
-    platform_fallback_editor().to_string()
 }
 
 fn platform_fallback_editor() -> &'static str {

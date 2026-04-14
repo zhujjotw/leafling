@@ -453,7 +453,11 @@ impl App {
             .as_deref()
             .map(crate::editor::binary_name);
         let index = current
-            .and_then(|name| editors.iter().position(|e| e.name == name))
+            .and_then(|bin| {
+                editors
+                    .iter()
+                    .position(|e| crate::editor::binary_name(&e.command) == bin)
+            })
             .unwrap_or(0);
         self.editor_picker.editors = editors;
         self.editor_picker.index = index;
@@ -462,7 +466,7 @@ impl App {
 
     pub(crate) fn close_editor_picker(&mut self) {
         if let Some(entry) = self.editor_picker.editors.get(self.editor_picker.index) {
-            self.editor_config = Some(entry.name.clone());
+            self.editor_config = Some(entry.command.clone());
         }
         self.editor_picker.open = false;
     }
