@@ -52,8 +52,8 @@ const KNOWN_EDITORS: &[(&str, EditorKind)] = &[
     ("kate", EditorKind::Gui),
     ("mousepad", EditorKind::Gui),
     ("zed", EditorKind::Gui),
-    ("notepad++", EditorKind::Gui),
     ("notepad", EditorKind::Gui),
+    ("notepad++", EditorKind::Gui),
 ];
 
 pub(crate) fn which(bin: &str) -> Option<PathBuf> {
@@ -67,15 +67,21 @@ pub(crate) fn which(bin: &str) -> Option<PathBuf> {
     } else {
         ':'
     };
-    let name = if cfg!(target_os = "windows") && !bin.contains('.') {
-        format!("{bin}.exe")
+    let candidates: Vec<String> = if cfg!(target_os = "windows") && !bin.contains('.') {
+        vec![
+            format!("{bin}.exe"),
+            format!("{bin}.cmd"),
+            format!("{bin}.bat"),
+        ]
     } else {
-        bin.to_string()
+        vec![bin.to_string()]
     };
-    path_var
-        .split(separator)
-        .map(|dir| Path::new(dir).join(&name))
-        .find(|p| p.is_file())
+    path_var.split(separator).find_map(|dir| {
+        candidates
+            .iter()
+            .map(|name| Path::new(dir).join(name))
+            .find(|p| p.is_file())
+    })
 }
 
 pub(crate) fn scan_available_editors() -> Vec<EditorEntry> {

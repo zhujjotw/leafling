@@ -375,6 +375,16 @@ pub(crate) fn run(
 
 const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(2000);
 
+fn strip_unc_prefix(path: std::path::PathBuf) -> std::path::PathBuf {
+    if cfg!(target_os = "windows") {
+        let s = path.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return std::path::PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
 fn handle_open_in_editor(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
@@ -382,7 +392,7 @@ fn handle_open_in_editor(
     themes: &ThemeSet,
 ) -> Result<()> {
     let filepath = match app.filepath() {
-        Some(p) => p.canonicalize().unwrap_or_else(|_| p.to_path_buf()),
+        Some(p) => strip_unc_prefix(p.canonicalize().unwrap_or_else(|_| p.to_path_buf())),
         None => {
             app.set_editor_flash(EditorFlash::NoFile);
             return Ok(());
