@@ -1,6 +1,7 @@
 use crate::{
     app::App,
     cli::version_text,
+    editor::EditorKind,
     theme::{app_theme, theme_preset_label, THEME_PRESETS},
 };
 use ratatui::{
@@ -14,7 +15,7 @@ use super::centered_rect;
 
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(56, 16, f.area());
+    let area = centered_rect(56, 17, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -41,7 +42,7 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("j/k, ↑/↓   ", key_style),
             Span::styled("scroll", text_style),
             Span::raw("            "),
-            Span::styled("/, Ctrl+F  ", key_style),
+            Span::styled("Ctrl+F     ", key_style),
             Span::styled("search", text_style),
         ]),
         Line::from(vec![
@@ -61,19 +62,26 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("r          ", key_style),
             Span::styled("reload (watch)", text_style),
             Span::raw("    "),
-            Span::styled("?          ", key_style),
-            Span::styled("show help", text_style),
+            Span::styled("Ctrl+E     ", key_style),
+            Span::styled("edit", text_style),
         ]),
         Line::from(vec![
             Span::styled("t          ", key_style),
             Span::styled("toggle toc", text_style),
             Span::raw("        "),
-            Span::styled("q          ", key_style),
-            Span::styled("quit", text_style),
+            Span::styled("?          ", key_style),
+            Span::styled("help", text_style),
         ]),
         Line::from(vec![
             Span::styled("T          ", key_style),
             Span::styled("theme picker", text_style),
+            Span::raw("      "),
+            Span::styled("q          ", key_style),
+            Span::styled("quit", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("E          ", key_style),
+            Span::styled("editor picker", text_style),
         ]),
         Line::from(""),
         Line::from(vec![Span::styled("Esc or ? to close", footer_style)]),
@@ -502,4 +510,117 @@ fn highlighted_picker_label(
     }
 
     spans
+}
+
+pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
+    let theme = app_theme();
+    let entries = app.editor_picker_entries();
+    let selected = app.editor_picker_index();
+    let current_editor = app.editor_config().map(crate::editor::binary_name);
+
+    let section_style = Style::default()
+        .fg(theme.ui.toc_primary_active)
+        .add_modifier(Modifier::BOLD);
+    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+
+    let title_style = Style::default().fg(theme.ui.status_shortcut_fg);
+
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    lines.push(Line::from(vec![Span::styled(
+        "Choose an editor",
+        title_style,
+    )]));
+    lines.push(Line::from(""));
+
+    if entries.is_empty() {
+        lines.push(Line::from(vec![Span::styled(
+            "No editors found",
+            Style::default().fg(theme.ui.status_search_error_fg),
+        )]));
+    } else {
+        let has_terminal = entries.iter().any(|e| e.kind == EditorKind::Terminal);
+        let has_gui = entries.iter().any(|e| e.kind == EditorKind::Gui);
+
+        let mk_line = |entry: &crate::editor::EditorEntry, idx: usize| -> Line<'static> {
+            let is_selected = idx == selected;
+            let is_current = current_editor == Some(crate::editor::binary_name(&entry.command));
+            let bg = if is_selected {
+                theme.ui.toc_active_bg
+            } else {
+                theme.ui.toc_bg
+            };
+            let fg = if is_selected {
+                theme.ui.toc_primary_active
+            } else {
+                theme.ui.toc_primary_inactive
+            };
+            let mut modifier = Modifier::empty();
+            if is_selected || is_current {
+                modifier |= Modifier::BOLD;
+            }
+            let marker = if is_selected { "▸ " } else { "  " };
+            let check = if is_current { "  ✓" } else { "" };
+            Line::from(vec![
+                Span::styled(
+                    marker.to_string(),
+                    Style::default()
+                        .fg(theme.ui.toc_accent)
+                        .bg(bg)
+                        .add_modifier(modifier),
+                ),
+                Span::styled(
+                    entry.name.clone(),
+                    Style::default().fg(fg).bg(bg).add_modifier(modifier),
+                ),
+                Span::styled(
+                    check.to_string(),
+                    Style::default()
+                        .fg(theme.ui.toc_accent)
+                        .bg(bg)
+                        .add_modifier(modifier),
+                ),
+            ])
+        };
+
+        let mut item_idx = 0usize;
+        if has_terminal {
+            lines.push(Line::from(vec![Span::styled("Terminal", section_style)]));
+            for entry in entries.iter().filter(|e| e.kind == EditorKind::Terminal) {
+                lines.push(mk_line(entry, item_idx));
+                item_idx += 1;
+            }
+        }
+        if has_gui {
+            if has_terminal {
+                lines.push(Line::from(""));
+            }
+            lines.push(Line::from(vec![Span::styled("GUI", section_style)]));
+            for entry in entries.iter().filter(|e| e.kind == EditorKind::Gui) {
+                lines.push(mk_line(entry, item_idx));
+                item_idx += 1;
+            }
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        "Enter select • Esc cancel",
+        footer_style,
+    )]));
+
+    let height = (lines.len() as u16 + 2).min(18);
+    let area = centered_rect(38, height, f.area());
+
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .title("─ Editor ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.ui.toc_border))
+                .style(Style::default().bg(theme.ui.toc_bg))
+                .padding(Padding::new(1, 1, 0, 0)),
+        ),
+        area,
+    );
 }

@@ -1,5 +1,6 @@
 use crate::{
-    app::{App, FileChange},
+    app::{App, EditorFlash, FileChange},
+    editor::{self, classify, open_in_editor, split_editor_cmd, EditorResult},
     render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
 use anyhow::Result;
@@ -85,14 +86,14 @@ pub(crate) fn run(
             needs_redraw = false;
         }
 
-        let flash_timeout = app.reload_flash_started().and_then(|started| {
-            let elapsed = started.elapsed();
-            (elapsed < FLASH_DURATION).then_some(FLASH_DURATION - elapsed)
-        });
-        let resize_timeout = pending_resize.and_then(|started| {
-            let elapsed = started.elapsed();
-            (elapsed < RESIZE_DEBOUNCE).then_some(RESIZE_DEBOUNCE - elapsed)
-        });
+        let flash_timeout = app
+            .reload_flash_started()
+            .and_then(|started| FLASH_DURATION.checked_sub(started.elapsed()));
+        let editor_flash_timeout = app
+            .editor_flash()
+            .and_then(|(_, started)| EDITOR_FLASH_DURATION.checked_sub(started.elapsed()));
+        let resize_timeout =
+            pending_resize.and_then(|started| RESIZE_DEBOUNCE.checked_sub(started.elapsed()));
         let poll_timeout = [
             if app.is_watch_enabled() {
                 Some(WATCH_INTERVAL)
@@ -105,6 +106,7 @@ pub(crate) fn run(
                 None
             },
             flash_timeout,
+            editor_flash_timeout,
             resize_timeout,
         ]
         .into_iter()
@@ -232,6 +234,14 @@ pub(crate) fn run(
                                 app.preview_theme_preset(preset, ss, themes);
                             }
                         }
+                    } else if app.is_editor_picker_open() {
+                        match key.code {
+                            KeyCode::Esc => app.cancel_editor_picker(),
+                            KeyCode::Enter => app.close_editor_picker(),
+                            KeyCode::Char('j') | KeyCode::Down => app.move_editor_picker_down(),
+                            KeyCode::Char('k') | KeyCode::Up => app.move_editor_picker_up(),
+                            _ => state_changed = false,
+                        }
                     } else if app.is_search_mode() {
                         match key.code {
                             KeyCode::Esc => app.cancel_search(),
@@ -265,6 +275,9 @@ pub(crate) fn run(
                             KeyCode::Char('T') => {
                                 app.open_theme_picker();
                             }
+                            KeyCode::Char('E') => {
+                                app.open_editor_picker();
+                            }
                             KeyCode::Char('?') => {
                                 app.open_help();
                             }
@@ -277,6 +290,9 @@ pub(crate) fn run(
                             KeyCode::Char('/') => app.begin_search(),
                             KeyCode::Char('n') => app.next_match(),
                             KeyCode::Char('N') => app.prev_match(),
+                            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                handle_open_in_editor(terminal, app, ss, themes)?;
+                            }
                             KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
                                 if let Some(n) = c.to_digit(10) {
                                     app.jump_to_toc(n as usize - 1);
@@ -345,6 +361,81 @@ pub(crate) fn run(
                     needs_redraw = true;
                 }
             }
+        }
+
+        if let Some((_, started)) = app.editor_flash() {
+            if started.elapsed() >= EDITOR_FLASH_DURATION {
+                app.clear_editor_flash();
+                needs_redraw = true;
+            }
+        }
+    }
+    Ok(())
+}
+
+const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(2000);
+
+fn strip_unc_prefix(path: std::path::PathBuf) -> std::path::PathBuf {
+    if cfg!(target_os = "windows") {
+        let s = path.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return std::path::PathBuf::from(stripped);
+        }
+    }
+    path
+}
+
+fn handle_open_in_editor(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    ss: &SyntaxSet,
+    themes: &ThemeSet,
+) -> Result<()> {
+    let filepath = match app.filepath() {
+        Some(p) => strip_unc_prefix(p.canonicalize().unwrap_or_else(|_| p.to_path_buf())),
+        None => {
+            app.set_editor_flash(EditorFlash::NoFile);
+            return Ok(());
+        }
+    };
+
+    let editor_cmd = match app.editor_config() {
+        Some(e) => e.to_string(),
+        None => {
+            app.set_editor_flash(EditorFlash::EditorNotFound("no editor configured".into()));
+            return Ok(());
+        }
+    };
+
+    let emulator = editor::detect_terminal_emulator();
+    let kind = classify(&editor_cmd);
+
+    match open_in_editor(&editor_cmd, &filepath, kind, &emulator) {
+        Ok(EditorResult::Opened) => {
+            let name = editor::binary_name(&editor_cmd).to_string();
+            app.set_editor_flash(EditorFlash::Opened(name));
+        }
+        Ok(EditorResult::NeedsSameTerminal) => {
+            let (bin, args) = split_editor_cmd(&editor_cmd);
+            crossterm::terminal::disable_raw_mode()?;
+            crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
+
+            let status = std::process::Command::new(bin)
+                .args(&args)
+                .arg(&filepath)
+                .status();
+
+            crossterm::terminal::enable_raw_mode()?;
+            crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+            terminal.clear()?;
+            app.reload(ss, themes);
+
+            if let Err(e) = status {
+                app.set_editor_flash(EditorFlash::EditorNotFound(format!("{bin}: {e}")));
+            }
+        }
+        Err(msg) => {
+            app.set_editor_flash(EditorFlash::EditorNotFound(msg));
         }
     }
     Ok(())

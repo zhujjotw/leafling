@@ -1,4 +1,7 @@
-use crate::{app::App, theme::app_theme};
+use crate::{
+    app::{App, EditorFlash},
+    theme::app_theme,
+};
 use ratatui::{
     style::{Color, Modifier, Style},
     text::Span,
@@ -171,9 +174,39 @@ pub(crate) fn status_percent_section(pct: u16, bar_bg: Color) -> Vec<Span<'stati
     )]
 }
 
+fn editor_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
+    let (flash, started) = app.editor_flash()?;
+    if started.elapsed() >= std::time::Duration::from_millis(2000) {
+        return None;
+    }
+    let theme = app_theme();
+    let bar_bg = status_bar_bg();
+    let (message, fg) = match flash {
+        EditorFlash::Opened(name) => (format!(" Opened in {name} "), theme.ui.status_reloaded_fg),
+        EditorFlash::NoFile => (
+            " No file to edit ".to_string(),
+            theme.ui.status_search_error_fg,
+        ),
+        EditorFlash::EditorNotFound(msg) => (
+            format!(" Editor not found: {msg} "),
+            theme.ui.status_search_error_fg,
+        ),
+    };
+    Some(vec![Span::styled(
+        message,
+        Style::default().fg(fg).bg(bar_bg),
+    )])
+}
+
 pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
     let bar_bg = status_bar_bg();
     let outer_separator = Span::raw(" ");
+
+    if let Some(flash_section) = editor_flash_section(app) {
+        let mut left = status_brand_section();
+        left.extend(flash_section);
+        return join_span_sections(vec![left], outer_separator);
+    }
 
     let mut left_section = status_brand_section();
     left_section.extend(status_filename_section(app.filename()));

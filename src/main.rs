@@ -5,6 +5,7 @@ use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 mod app;
 mod cli;
+mod editor;
 mod markdown;
 mod render;
 mod runtime;
@@ -24,6 +25,8 @@ use update::run_update;
 
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
+#[cfg(test)]
+pub(crate) use editor::{binary_name, classify, resolve_editor, split_editor_cmd, EditorKind};
 #[cfg(test)]
 pub(crate) use markdown::toc::{
     normalize_toc, should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry,
@@ -83,8 +86,10 @@ fn main() -> Result<()> {
         debug_input,
         file_arg,
         theme,
+        editor: cli_editor,
         ..
     } = options;
+    let resolved_editor = editor::resolve_editor(cli_editor.as_deref());
     runtime::debug_log(debug_input, &format!("main start args={args:?}"));
     set_theme_preset(theme);
 
@@ -166,6 +171,7 @@ fn main() -> Result<()> {
         },
     );
     app.set_last_content_hash(last_content_hash);
+    app.set_editor_config(Some(resolved_editor));
     if let Some(dir) = open_browser_picker_dir {
         app.queue_file_picker(dir);
     }
@@ -182,6 +188,8 @@ fn main() -> Result<()> {
     );
 
     let mut stdout = io::stdout();
+    print!("\x1b]0;leaf\x07");
+    let _ = io::stdout().flush();
     runtime::debug_log(debug_input, "terminal enter start");
     let mut session = TerminalSession::enter(&mut stdout)?;
     runtime::debug_log(debug_input, "terminal enter done");

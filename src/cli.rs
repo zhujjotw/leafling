@@ -12,10 +12,11 @@ pub(crate) struct CliOptions {
     pub(crate) print_version: bool,
     pub(crate) file_arg: Option<String>,
     pub(crate) theme: ThemePreset,
+    pub(crate) editor: Option<String>,
 }
 
 pub(crate) fn usage_text() -> &'static str {
-    "Usage:  leaf [--watch] [--theme arctic|forest|ocean|solarized-dark] [file.md]\n        leaf [--watch] --picker\n        leaf --update\n        echo '# Hello' | leaf"
+    "Usage:  leaf [--watch] [--theme arctic|forest|ocean|solarized-dark] [--editor <name>] [file.md]\n        leaf [--watch] --picker\n        leaf --update\n        echo '# Hello' | leaf"
 }
 
 pub(crate) fn version_text() -> &'static str {
@@ -64,6 +65,15 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
                 options.theme = parse_theme_preset(name)
                     .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?;
             }
+            "--editor" | "-e" => {
+                let Some(value) = iter.next() else {
+                    anyhow::bail!("Missing value for --editor");
+                };
+                options.editor = Some(value.clone());
+            }
+            _ if arg.starts_with("--editor=") => {
+                options.editor = Some(arg["--editor=".len()..].to_string());
+            }
             "--" => positional_only = true,
             _ if arg.starts_with('-') => anyhow::bail!("Unknown flag: {arg}"),
             _ if options.file_arg.is_none() => options.file_arg = Some(arg.clone()),
@@ -76,7 +86,8 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
             || options.picker
             || options.debug_input
             || options.file_arg.is_some()
-            || options.theme != ThemePreset::default();
+            || options.theme != ThemePreset::default()
+            || options.editor.is_some();
         if has_non_update_flags {
             anyhow::bail!("--update must be used on its own");
         }

@@ -12,6 +12,7 @@ use syntect::{
 };
 
 mod app;
+mod editor;
 mod file_picker;
 mod markdown;
 mod render;

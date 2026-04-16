@@ -22,8 +22,23 @@ mod fuzzy;
 pub(crate) use file_picker::{FilePickerMode, FilePickerState, PickerIndexTruncation};
 use file_picker::{PendingPicker, PickerLoadState};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum EditorFlash {
+    Opened(String),
+    NoFile,
+    EditorNotFound(String),
+}
+
 pub(super) mod theme_picker;
 pub(crate) use theme_picker::ThemePickerState;
+
+use crate::editor::EditorEntry;
+
+pub(crate) struct EditorPickerState {
+    pub(super) open: bool,
+    pub(super) editors: Vec<EditorEntry>,
+    pub(super) index: usize,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct FileState {
@@ -49,6 +64,7 @@ pub(crate) struct StatusCacheKey {
     search_idx: usize,
     watch: bool,
     flash_active: bool,
+    editor_flash_active: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -87,7 +103,10 @@ pub(crate) struct App {
     pub(super) pending_picker: PendingPicker,
     pub(super) picker_load_state: PickerLoadState,
     pub(super) theme_picker: ThemePickerState,
+    pub(super) editor_picker: EditorPickerState,
     pub(super) render_width: usize,
+    pub(super) editor_config: Option<String>,
+    pub(super) editor_flash: Option<(EditorFlash, Instant)>,
 }
 
 impl App {
@@ -192,7 +211,14 @@ impl App {
                 original: None,
                 preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
             },
+            editor_picker: EditorPickerState {
+                open: false,
+                editors: Vec::new(),
+                index: 0,
+            },
             render_width: 80,
+            editor_config: None,
+            editor_flash: None,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -354,6 +380,11 @@ impl App {
                 .reload_flash
                 .map(|t| t.elapsed() < Duration::from_millis(1500))
                 .unwrap_or(false),
+            editor_flash_active: self
+                .editor_flash
+                .as_ref()
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(2000))
+                .unwrap_or(false),
         };
 
         if self.status_cache_key.as_ref() == Some(&cache_key) {
@@ -389,6 +420,85 @@ impl App {
 
     pub(crate) fn reload_flash_started(&self) -> Option<Instant> {
         self.reload_flash
+    }
+
+    pub(crate) fn set_editor_config(&mut self, editor: Option<String>) {
+        self.editor_config = editor;
+    }
+
+    pub(crate) fn editor_config(&self) -> Option<&str> {
+        self.editor_config.as_deref()
+    }
+
+    pub(crate) fn set_editor_flash(&mut self, flash: EditorFlash) {
+        self.editor_flash = Some((flash, Instant::now()));
+    }
+
+    pub(crate) fn editor_flash(&self) -> Option<&(EditorFlash, Instant)> {
+        self.editor_flash.as_ref()
+    }
+
+    pub(crate) fn clear_editor_flash(&mut self) {
+        self.editor_flash = None;
+    }
+
+    pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
+        self.filepath.as_deref()
+    }
+
+    pub(crate) fn open_editor_picker(&mut self) {
+        let editors = crate::editor::scan_available_editors();
+        let current = self
+            .editor_config
+            .as_deref()
+            .map(crate::editor::binary_name);
+        let index = current
+            .and_then(|bin| {
+                editors
+                    .iter()
+                    .position(|e| crate::editor::binary_name(&e.command) == bin)
+            })
+            .unwrap_or(0);
+        self.editor_picker.editors = editors;
+        self.editor_picker.index = index;
+        self.editor_picker.open = true;
+    }
+
+    pub(crate) fn close_editor_picker(&mut self) {
+        if let Some(entry) = self.editor_picker.editors.get(self.editor_picker.index) {
+            self.editor_config = Some(entry.command.clone());
+        }
+        self.editor_picker.open = false;
+    }
+
+    pub(crate) fn cancel_editor_picker(&mut self) {
+        self.editor_picker.open = false;
+    }
+
+    pub(crate) fn is_editor_picker_open(&self) -> bool {
+        self.editor_picker.open
+    }
+
+    pub(crate) fn move_editor_picker_up(&mut self) {
+        let len = self.editor_picker.editors.len();
+        if len > 0 {
+            self.editor_picker.index = (self.editor_picker.index + len - 1) % len;
+        }
+    }
+
+    pub(crate) fn move_editor_picker_down(&mut self) {
+        let len = self.editor_picker.editors.len();
+        if len > 0 {
+            self.editor_picker.index = (self.editor_picker.index + 1) % len;
+        }
+    }
+
+    pub(crate) fn editor_picker_index(&self) -> usize {
+        self.editor_picker.index
+    }
+
+    pub(crate) fn editor_picker_entries(&self) -> &[EditorEntry] {
+        &self.editor_picker.editors
     }
 
     pub(crate) fn set_last_file_state(&mut self, state: FileState) {

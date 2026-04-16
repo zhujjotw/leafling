@@ -48,6 +48,8 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
         modal::render_file_picker(f, app);
     } else if app.is_theme_picker_open() {
         modal::render_theme_picker(f, app);
+    } else if app.is_editor_picker_open() {
+        modal::render_editor_picker(f, app);
     }
 }
 
