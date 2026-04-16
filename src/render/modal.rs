@@ -13,9 +13,35 @@ use ratatui::{
 
 use super::centered_rect;
 
+const FUZZY_PICKER_FOOTER: &[&str] = &[
+    "↑/↓ move",
+    "<char> filter",
+    "enter open",
+    "esc clear",
+    "ctrl+c quit",
+];
+
+const BROWSER_PICKER_FOOTER: &[&str] = &["↑/↓ move", "enter open", "esc parent", "q quit"];
+
+const PICKER_FAILED_FOOTER: &[&str] = &["esc quit", "enter quit", "q quit"];
+
+fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
+    let theme = app_theme();
+    let shortcut_style = Style::default().fg(theme.ui.status_shortcut_fg).bg(bg);
+    let separator_style = Style::default().fg(theme.ui.status_separator).bg(bg);
+    let mut spans = Vec::new();
+    for (idx, segment) in segments.iter().enumerate() {
+        if idx > 0 {
+            spans.push(Span::styled(" · ", separator_style));
+        }
+        spans.push(Span::styled(*segment, shortcut_style));
+    }
+    Line::from(spans)
+}
+
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(56, 17, f.area());
+    let area = centered_rect(54, 17, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -23,7 +49,7 @@ pub(super) fn render_help_popup(f: &mut Frame) {
         .fg(theme.ui.toc_accent)
         .add_modifier(Modifier::BOLD);
     let text_style = Style::default().fg(theme.ui.toc_primary_inactive);
-    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+
     let title_style = Style::default()
         .fg(theme.markdown.heading_2)
         .add_modifier(Modifier::BOLD);
@@ -43,7 +69,7 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("scroll", text_style),
             Span::raw("            "),
             Span::styled("Ctrl+F     ", key_style),
-            Span::styled("search", text_style),
+            Span::styled("find", text_style),
         ]),
         Line::from(vec![
             Span::styled("PgUp/PgDn  ", key_style),
@@ -59,32 +85,32 @@ pub(super) fn render_help_popup(f: &mut Frame) {
         Line::from(""),
         Line::from(vec![Span::styled("Actions", section_style)]),
         Line::from(vec![
-            Span::styled("r          ", key_style),
-            Span::styled("reload (watch)", text_style),
-            Span::raw("    "),
+            Span::styled("Shift+E    ", key_style),
+            Span::styled("editor picker", text_style),
+            Span::raw("     "),
             Span::styled("Ctrl+E     ", key_style),
             Span::styled("edit", text_style),
         ]),
         Line::from(vec![
-            Span::styled("t          ", key_style),
-            Span::styled("toggle toc", text_style),
-            Span::raw("        "),
+            Span::styled("Shift+T    ", key_style),
+            Span::styled("theme picker", text_style),
+            Span::raw("      "),
             Span::styled("?          ", key_style),
             Span::styled("help", text_style),
         ]),
         Line::from(vec![
-            Span::styled("T          ", key_style),
-            Span::styled("theme picker", text_style),
-            Span::raw("      "),
+            Span::styled("r          ", key_style),
+            Span::styled("reload (watch)", text_style),
+            Span::raw("    "),
             Span::styled("q          ", key_style),
             Span::styled("quit", text_style),
         ]),
         Line::from(vec![
-            Span::styled("E          ", key_style),
-            Span::styled("editor picker", text_style),
+            Span::styled("t          ", key_style),
+            Span::styled("toggle toc", text_style),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled("Esc or ? to close", footer_style)]),
+        modal_footer_line(&["esc close", "? close"], theme.ui.toc_bg),
     ];
 
     f.render_widget(Clear, area);
@@ -103,9 +129,8 @@ pub(super) fn render_help_popup(f: &mut Frame) {
 
 pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
     let theme = app_theme();
-    let area = centered_rect(38, 10, f.area());
+    let area = centered_rect(43, 10, f.area());
     let active = app.theme_picker_reference_preset();
-    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
 
     let mut lines = vec![
         Line::from(vec![Span::styled(
@@ -122,11 +147,12 @@ pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
         } else {
             theme.ui.toc_bg
         };
-        let marker = if selected { "▸ " } else { "  " };
-        let name = if is_active {
-            format!("{}  ✓", theme_preset_label(*preset))
+        let marker = if selected { "▎ " } else { "  " };
+        let check = if is_active { "  ✓" } else { "" };
+        let modifier = if is_active || selected {
+            Modifier::BOLD
         } else {
-            theme_preset_label(*preset).to_string()
+            Modifier::empty()
         };
         lines.push(Line::from(vec![
             Span::styled(
@@ -141,7 +167,7 @@ pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
                     }),
             ),
             Span::styled(
-                name,
+                theme_preset_label(*preset),
                 Style::default()
                     .fg(if selected {
                         theme.ui.toc_primary_active
@@ -149,19 +175,22 @@ pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
                         theme.ui.toc_primary_inactive
                     })
                     .bg(bg)
-                    .add_modifier(if is_active || selected {
-                        Modifier::BOLD
-                    } else {
-                        Modifier::empty()
-                    }),
+                    .add_modifier(modifier),
+            ),
+            Span::styled(
+                check,
+                Style::default()
+                    .fg(theme.ui.toc_accent)
+                    .bg(bg)
+                    .add_modifier(modifier),
             ),
         ]));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "Enter keep • Esc restore",
-        footer_style.bg(theme.ui.toc_bg),
-    )]));
+    lines.push(modal_footer_line(
+        &["↑/↓ preview", "enter keep", "esc restore"],
+        theme.ui.toc_bg,
+    ));
 
     f.render_widget(Clear, area);
     f.render_widget(
@@ -184,7 +213,7 @@ pub(super) fn render_file_picker(f: &mut Frame, app: &App) {
         .fg(theme.markdown.heading_2)
         .add_modifier(Modifier::BOLD);
     let section_style = Style::default().fg(theme.ui.status_shortcut_fg);
-    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+
     let inner_height = area.height.saturating_sub(2) as usize;
     let header_lines = if app.is_fuzzy_file_picker() { 4 } else { 3 };
     let total = app.file_picker_filtered_indices().len();
@@ -323,14 +352,14 @@ pub(super) fn render_file_picker(f: &mut Frame, app: &App) {
         lines.push(Line::from(""));
     }
 
-    lines.push(Line::from(vec![Span::styled(
+    lines.push(modal_footer_line(
         if app.is_fuzzy_file_picker() {
-            "↑/↓ move • enter open • type filter • esc clear • ctrl+c quit"
+            FUZZY_PICKER_FOOTER
         } else {
-            "enter open • backspace up • ctrl+c quit"
+            BROWSER_PICKER_FOOTER
         },
-        footer_style.bg(theme.ui.toc_bg),
-    )]));
+        theme.ui.toc_bg,
+    ));
 
     f.render_widget(Clear, area);
     f.render_widget(
@@ -353,7 +382,7 @@ pub(super) fn render_picker_loading(f: &mut Frame, app: &App) {
         .fg(theme.markdown.heading_2)
         .add_modifier(Modifier::BOLD);
     let section_style = Style::default().fg(theme.ui.status_shortcut_fg);
-    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
+
     let is_failed = app.is_picker_load_failed();
     let is_fuzzy = matches!(
         app.pending_picker_mode(),
@@ -383,7 +412,7 @@ pub(super) fn render_picker_loading(f: &mut Frame, app: &App) {
         lines.push(Line::from(vec![
             Span::styled("Query: ", section_style),
             Span::styled(
-                " type to filter ".to_string(),
+                " type to filter ",
                 Style::default()
                     .fg(theme.ui.toc_primary_inactive)
                     .bg(theme.markdown.inline_code_bg),
@@ -402,14 +431,16 @@ pub(super) fn render_picker_loading(f: &mut Frame, app: &App) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        if is_fuzzy {
-            "↑/↓ move • enter open • type filter • esc clear • ctrl+c quit"
+    lines.push(modal_footer_line(
+        if is_failed {
+            PICKER_FAILED_FOOTER
+        } else if is_fuzzy {
+            FUZZY_PICKER_FOOTER
         } else {
-            "enter open • backspace up • ctrl+c quit"
+            BROWSER_PICKER_FOOTER
         },
-        footer_style.bg(theme.ui.toc_bg),
-    )]));
+        theme.ui.toc_bg,
+    ));
 
     f.render_widget(Clear, area);
     f.render_widget(
@@ -521,7 +552,6 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
-    let footer_style = Style::default().fg(theme.ui.status_shortcut_fg);
 
     let title_style = Style::default().fg(theme.ui.status_shortcut_fg);
 
@@ -558,7 +588,7 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
             if is_selected || is_current {
                 modifier |= Modifier::BOLD;
             }
-            let marker = if is_selected { "▸ " } else { "  " };
+            let marker = if is_selected { "▎ " } else { "  " };
             let check = if is_current { "  ✓" } else { "" };
             Line::from(vec![
                 Span::styled(
@@ -603,13 +633,13 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "Enter select • Esc cancel",
-        footer_style,
-    )]));
+    lines.push(modal_footer_line(
+        &["↑/↓ move", "enter confirm", "esc cancel"],
+        theme.ui.toc_bg,
+    ));
 
     let height = (lines.len() as u16 + 2).min(18);
-    let area = centered_rect(38, height, f.area());
+    let area = centered_rect(42, height, f.area());
 
     f.render_widget(Clear, area);
     f.render_widget(

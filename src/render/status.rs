@@ -117,37 +117,10 @@ pub(crate) fn status_search_section(app: &App) -> Option<Vec<Span<'static>>> {
 pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
     if app.is_search_mode() {
         &["enter confirm", "esc cancel"]
-    } else if app.is_file_picker_open() {
-        if app.is_fuzzy_file_picker() {
-            &["↑/↓ move", "enter open", "backspace delete", "ctrl+c quit"]
-        } else {
-            &["j/k move", "enter open", "backspace up", "ctrl+c quit"]
-        }
-    } else if app.is_theme_picker_open() {
-        &["j/k preview", "enter keep", "esc restore"]
-    } else if app.is_help_open() {
-        &["esc close", "? close"]
     } else if app.has_active_search() {
-        &[
-            "enter next",
-            "n/N next/prev",
-            "/ search",
-            "? help",
-            "T theme",
-            "esc clear",
-            "q quit",
-        ]
+        &["n/N next/prev", "esc cancel"]
     } else {
-        &[
-            "j/k scroll",
-            "g/G top/bot",
-            "t toc",
-            "T theme",
-            "/ search",
-            "? help",
-            "n/N next/prev",
-            "q quit",
-        ]
+        &["ctrl+e edit", "ctrl+f find", "t toc", "? help", "q quit"]
     }
 }
 
@@ -158,7 +131,7 @@ pub(crate) fn status_shortcuts_section(app: &App, bar_bg: Color) -> Vec<Span<'st
         .iter()
         .map(|segment| {
             vec![Span::styled(
-                (*segment).to_string(),
+                *segment,
                 Style::default().fg(theme.ui.status_shortcut_fg).bg(bar_bg),
             )]
         })
@@ -215,12 +188,15 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
         left_section.extend(section);
     }
 
-    if let Some(section) = status_watch_section(app) {
-        left_section.extend(section);
+    let file_open = !app.is_file_picker_open() && !app.is_picker_loading();
+    if file_open {
+        if let Some(section) = status_watch_section(app) {
+            left_section.extend(section);
+        }
     }
 
     let mut sections = vec![left_section, status_shortcuts_section(app, bar_bg)];
-    if !app.is_file_picker_open() && !app.is_picker_loading() {
+    if file_open {
         sections.push(status_percent_section(pct, bar_bg));
     }
 

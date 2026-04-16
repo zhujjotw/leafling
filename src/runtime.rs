@@ -144,10 +144,14 @@ pub(crate) fn run(
                     if app.is_help_open() {
                         match key.code {
                             KeyCode::Esc | KeyCode::Char('?') => app.close_help(),
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.close_help();
+                            }
                             _ => state_changed = false,
                         }
                     } else if app.is_picker_loading() {
                         match key.code {
+                            KeyCode::Char('q') => break,
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 break;
                             }
@@ -155,7 +159,7 @@ pub(crate) fn run(
                         }
                     } else if app.is_picker_load_failed() {
                         match key.code {
-                            KeyCode::Esc | KeyCode::Enter => break,
+                            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => break,
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 break;
                             }
@@ -179,9 +183,9 @@ pub(crate) fn run(
                             }
                             KeyCode::Up if app.is_fuzzy_file_picker() => app.move_file_picker_up(),
                             KeyCode::Esc => {
-                                if app.is_browser_file_picker()
-                                    || app.file_picker_query().is_empty()
-                                {
+                                if app.is_browser_file_picker() {
+                                    state_changed = app.open_file_picker_parent();
+                                } else if app.file_picker_query().is_empty() {
                                     state_changed = false;
                                 } else {
                                     app.clear_file_picker_query();
@@ -206,12 +210,16 @@ pub(crate) fn run(
                             _ => state_changed = false,
                         }
                     } else if app.is_theme_picker_open() {
+                        let dismiss = matches!(key.code, KeyCode::Esc | KeyCode::Char('T'))
+                            || (key.code == KeyCode::Char('c')
+                                && key.modifiers.contains(KeyModifiers::CONTROL));
+                        if dismiss {
+                            app.restore_theme_picker_preview(ss, themes);
+                            needs_redraw = true;
+                            state_changed = false;
+                        }
                         match key.code {
-                            KeyCode::Esc => {
-                                app.restore_theme_picker_preview(ss, themes);
-                                needs_redraw = true;
-                                state_changed = false;
-                            }
+                            _ if dismiss => {}
                             KeyCode::Enter => app.close_theme_picker(),
                             KeyCode::Char('j') | KeyCode::Down => {
                                 app.move_theme_picker_down();
@@ -236,7 +244,10 @@ pub(crate) fn run(
                         }
                     } else if app.is_editor_picker_open() {
                         match key.code {
-                            KeyCode::Esc => app.cancel_editor_picker(),
+                            KeyCode::Esc | KeyCode::Char('E') => app.cancel_editor_picker(),
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                app.cancel_editor_picker();
+                            }
                             KeyCode::Enter => app.close_editor_picker(),
                             KeyCode::Char('j') | KeyCode::Down => app.move_editor_picker_down(),
                             KeyCode::Char('k') | KeyCode::Up => app.move_editor_picker_up(),

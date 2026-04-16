@@ -65,6 +65,8 @@ pub(crate) struct StatusCacheKey {
     watch: bool,
     flash_active: bool,
     editor_flash_active: bool,
+    file_picker_open: bool,
+    picker_loading: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -385,6 +387,8 @@ impl App {
                 .as_ref()
                 .map(|(_, t)| t.elapsed() < Duration::from_millis(2000))
                 .unwrap_or(false),
+            file_picker_open: self.is_file_picker_open(),
+            picker_loading: self.is_picker_loading(),
         };
 
         if self.status_cache_key.as_ref() == Some(&cache_key) {

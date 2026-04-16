@@ -112,11 +112,12 @@ cat TESTING.md | leaf
 | `g` / Home | Top |
 | `G` / End | Bottom |
 | `t` | Toggle TOC sidebar |
-| `T` | Open theme picker |
-| `?` | Show help popup |
-| `1`–`9` | Jump to TOC section N |
-| `/` / `Ctrl+F` | Search |
+| `Shift+T` | Open theme picker |
+| `Shift+E` | Open editor picker |
+| `Ctrl+E` | Open in editor |
+| `Ctrl+F` / `/` | Find |
 | `n` / `N` | Next / prev match |
+| `?` | Show help popup |
 | `r` | Force reload (watch mode) |
 | `q` | Quit |
 
