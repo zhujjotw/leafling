@@ -162,10 +162,21 @@ if git diff --quiet -- Cargo.toml; then
     exit 1
 fi
 
-# Refresh Cargo.lock so the root package version stays in sync in the release commit.
 cargo update --workspace >/dev/null
 
-git add Cargo.toml Cargo.lock
+PREV_TAG="$(
+    git tag --sort=-v:refname \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+        | head -n 1
+)"
+[ -n "$PREV_TAG" ] || {
+    echo "No previous semver tag found" >&2
+    exit 1
+}
+
+./scripts/changelog-update.sh "$PREV_TAG" "$TAG"
+
+git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "$VERSION"
 git tag "$TAG"
 git push origin "HEAD:$BRANCH"
