@@ -44,7 +44,10 @@ pub(crate) fn run_update() -> Result<()> {
         expected_asset_download_url(&release.tag_name, &release.assets, CHECKSUMS_ASSET_NAME)?;
     let checksums = download_text_asset(checksums_url)?;
     let expected_checksum = find_expected_checksum(&checksums, asset_name)?;
-    let current_exe = std::env::current_exe().context("Cannot locate current executable")?;
+    let current_exe = match std::env::var("LEAF_CURRENT_EXE") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => std::env::current_exe().context("Cannot locate current executable")?,
+    };
     let temp_path = temp_download_path(&current_exe);
 
     download_asset(download_url, &temp_path)?;

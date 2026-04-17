@@ -22,6 +22,12 @@ Windows:
 irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
 ```
 
+npm:
+
+```bash
+npm install -g @rivolink/leaf
+```
+
 Verify the installation:
 
 ```bash
@@ -30,7 +36,9 @@ leaf --version
 
 ## Update
 
-Update an existing installation to the latest published release:
+Update an existing installation to the latest published release.
+
+Self:
 
 ```bash
 leaf --update
@@ -39,6 +47,12 @@ leaf --update
 `leaf --update` downloads the matching published asset, verifies it against the published `checksums.txt` SHA256, and then installs it.
 
 On Windows, if replacing the running `.exe` is blocked by the OS, rerun the PowerShell installer from the install section.
+
+npm:
+
+```bash
+npm update -g @rivolink/leaf
+```
 
 ## Build
 
@@ -192,4 +206,10 @@ Windows:
 
 ```powershell
 Remove-Item "$env:LOCALAPPDATA\Programs\leaf\leaf.exe" -Force
+```
+
+npm:
+
+```bash
+npm uninstall -g @rivolink/leaf
 ```
