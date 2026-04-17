@@ -6,11 +6,11 @@ VERSION="${1:?Usage: publish.sh <version>}"
 VERSION="${VERSION#v}"
 
 declare -A BINARIES=(
-  ["linux-x64"]=    "leaf-linux-x86_64"
-  ["linux-arm64"]=  "leaf-linux-arm64"
-  ["darwin-x64"]=   "leaf-macos-x86_64"
-  ["darwin-arm64"]= "leaf-macos-arm64"
-  ["win32-x64"]=    "leaf-windows-x86_64.exe"
+  ["linux-x64"]="leaf-linux-x86_64"
+  ["linux-arm64"]="leaf-linux-arm64"
+  ["darwin-x64"]="leaf-macos-x86_64"
+  ["darwin-arm64"]="leaf-macos-arm64"
+  ["win32-x64"]="leaf-windows-x86_64.exe"
   ["android-arm64"]="leaf-android-arm64"
 )
 
