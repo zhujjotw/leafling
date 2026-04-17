@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.9.2](https://github.com/RivoLink/leaf/releases/tag/1.9.2)] - 2026-04-17
+
+### Changed
+
+- auto generate changelog ([#27](https://github.com/RivoLink/leaf/pull/27))
+
 ## [[1.9.1](https://github.com/RivoLink/leaf/releases/tag/1.9.1)] - 2026-04-16
 
 ### Changed
