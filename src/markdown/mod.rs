@@ -349,23 +349,35 @@ fn push_heading_lines(
         3 => theme.heading_3,
         _ => theme.heading_other,
     };
-    let style = Style::default().fg(color).add_modifier(match level {
+    let heading_style = Style::default().fg(color).add_modifier(match level {
         1..=3 => Modifier::BOLD,
         _ => Modifier::empty(),
     });
     let title: String = spans.iter().map(|s| s.content.as_ref()).collect();
-    let rendered_title = if level == 3 {
-        format!("{title} ")
-    } else {
-        title.clone()
-    };
     toc.push(TocEntry {
         level,
         title: title.clone(),
         line: lines.len(),
     });
-    spans.clear();
-    lines.push(Line::from(vec![Span::styled(rendered_title, style)]));
+    let styled_spans: Vec<Span<'static>> = spans
+        .drain(..)
+        .map(|span| {
+            let mut style = heading_style;
+            if span.style.bg.is_some() {
+                style.fg = span.style.fg;
+                style.bg = span.style.bg;
+                style.sub_modifier = Modifier::BOLD;
+            }
+            Span::styled(span.content, style)
+        })
+        .collect();
+    if level == 3 {
+        let mut s = styled_spans;
+        s.push(Span::styled(" ", heading_style));
+        lines.push(Line::from(s));
+    } else {
+        lines.push(Line::from(styled_spans));
+    };
 
     match level {
         1 => lines.push(Line::from(Span::styled(
