@@ -217,7 +217,7 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
         left_section.extend(section);
     }
 
-    let file_open = !app.is_file_picker_open() && !app.is_picker_loading();
+    let file_open = app.has_content() || (!app.is_file_picker_open() && !app.is_picker_loading());
     if file_open {
         if let Some(section) = status_watch_section(app) {
             left_section.extend(section);

@@ -128,7 +128,9 @@ cat TESTING.md | leaf
 | `t` | Toggle TOC sidebar |
 | `Shift+T` | Open theme picker |
 | `Shift+E` | Open editor picker |
+| `Shift+P` | Open file browser |
 | `Ctrl+E` | Open in editor |
+| `Ctrl+P` | Open fuzzy picker |
 | `Ctrl+F` / `/` | Find |
 | `n` / `N` | Next / prev match |
 | `?` | Show help popup |
@@ -148,8 +150,8 @@ cat TESTING.md | leaf
 - ✅ YAML frontmatter is ignored in both preview and TOC
 - ✅ Native stdin input with bounded size
 - ✅ `leaf --update` to fetch, verify via published SHA256, and install the latest release on supported platforms
-- ✅ Fuzzy Markdown picker when launched without a file
-- ✅ Classic directory browser picker with `leaf --picker`
+- ✅ Fuzzy Markdown picker when launched without a file, or anytime with `Ctrl+P`
+- ✅ Classic directory browser picker with `leaf --picker`, or anytime with `Shift+P`
 - ✅ Theme picker with runtime preview
 - ✅ Help modal with in-app shortcuts
 

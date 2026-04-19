@@ -380,3 +380,45 @@ fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
         parse_markdown_with_width(source, &ss, &theme, 20).0.len()
     );
 }
+
+#[test]
+fn initial_mode_has_no_content() {
+    let (ss, theme) = test_assets();
+    let (lines, toc) = parse_markdown("", &ss, &theme);
+    let app = App::new_with_source(
+        lines,
+        toc,
+        AppConfig {
+            filename: "test".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+    assert!(!app.has_content(), "initial mode should have no content");
+}
+
+#[test]
+fn preview_mode_has_content() {
+    let src = "# Hello";
+    let (ss, theme) = test_assets();
+    let (lines, toc) = parse_markdown(src, &ss, &theme);
+    let app = App::new_with_source(
+        lines,
+        toc,
+        AppConfig {
+            filename: "test".to_string(),
+            source: src.to_string(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+    assert!(
+        app.has_content(),
+        "preview mode with source should have content"
+    );
+}

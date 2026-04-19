@@ -596,6 +596,21 @@ impl App {
         self.file_picker.open
     }
 
+    pub(crate) fn close_file_picker(&mut self) {
+        self.file_picker.open = false;
+        self.file_picker.query.clear();
+        self.file_picker.entries.clear();
+        self.file_picker.filtered.clear();
+        self.file_picker.match_positions.clear();
+        self.file_picker.index = 0;
+        self.file_picker.truncation = None;
+    }
+
+    pub(crate) fn cancel_picker_loading(&mut self) {
+        self.picker_load_state = PickerLoadState::Idle;
+        self.pending_picker = PendingPicker::None;
+    }
+
     pub(crate) fn file_picker_dir(&self) -> &std::path::Path {
         &self.file_picker.dir
     }

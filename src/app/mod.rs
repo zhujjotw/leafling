@@ -273,6 +273,8 @@ impl App {
         !self.toc.is_empty()
     }
 
+    // Always >= 5 (scroll padding).
+    // Use has_content() to check for actual content.
     pub(crate) fn total(&self) -> usize {
         self.lines.len()
     }
@@ -530,6 +532,21 @@ impl App {
 
     pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
         self.filepath.as_deref()
+    }
+
+    pub(crate) fn has_content(&self) -> bool {
+        self.filepath.is_some() || !self.source.is_empty()
+    }
+
+    pub(crate) fn picker_dir(&self) -> PathBuf {
+        std::env::current_dir()
+            .ok()
+            .or_else(|| {
+                self.filepath
+                    .as_ref()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            })
+            .unwrap_or_default()
     }
 
     pub(crate) fn open_editor_picker(&mut self) {

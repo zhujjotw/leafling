@@ -13,7 +13,7 @@ use ratatui::{
 
 use super::centered_rect;
 
-const FUZZY_PICKER_FOOTER: &[&str] = &[
+const FUZZY_PICKER_FOOTER_INIT: &[&str] = &[
     "↑/↓ move",
     "<char> filter",
     "enter open",
@@ -21,9 +21,40 @@ const FUZZY_PICKER_FOOTER: &[&str] = &[
     "ctrl+c quit",
 ];
 
-const BROWSER_PICKER_FOOTER: &[&str] = &["↑/↓ move", "enter open", "esc parent", "q quit"];
+const FUZZY_PICKER_FOOTER_PREVIEW: &[&str] = &[
+    "↑/↓ move",
+    "<char> filter",
+    "enter open",
+    "esc clear",
+    "ctrl+c close",
+];
 
-const PICKER_FAILED_FOOTER: &[&str] = &["esc quit", "enter quit", "q quit"];
+const BROWSER_PICKER_FOOTER_INIT: &[&str] = &["↑/↓ move", "enter open", "bsp parent", "q quit"];
+
+const BROWSER_PICKER_FOOTER_PREVIEW: &[&str] =
+    &["↑/↓ move", "enter open", "bsp parent", "ctrl+c close"];
+
+const PICKER_FAILED_FOOTER_INIT: &[&str] = &["esc quit", "enter quit", "q quit"];
+
+const PICKER_FAILED_FOOTER_PREVIEW: &[&str] = &["esc close", "enter close", "ctrl+c close"];
+
+fn picker_footer(has_content: bool, is_fuzzy: bool, is_failed: bool) -> &'static [&'static str] {
+    if has_content {
+        if is_failed {
+            PICKER_FAILED_FOOTER_PREVIEW
+        } else if is_fuzzy {
+            FUZZY_PICKER_FOOTER_PREVIEW
+        } else {
+            BROWSER_PICKER_FOOTER_PREVIEW
+        }
+    } else if is_failed {
+        PICKER_FAILED_FOOTER_INIT
+    } else if is_fuzzy {
+        FUZZY_PICKER_FOOTER_INIT
+    } else {
+        BROWSER_PICKER_FOOTER_INIT
+    }
+}
 
 fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
     let theme = app_theme();
@@ -41,7 +72,7 @@ fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
 
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(54, 19, f.area());
+    let area = centered_rect(54, 20, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -99,6 +130,13 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::raw("     "),
             Span::styled("Ctrl+E     ", key_style),
             Span::styled("edit", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("Shift+P    ", key_style),
+            Span::styled("file browser", text_style),
+            Span::raw("      "),
+            Span::styled("Ctrl+P     ", key_style),
+            Span::styled("pick", text_style),
         ]),
         Line::from(vec![
             Span::styled("Shift+T    ", key_style),
@@ -358,11 +396,7 @@ pub(super) fn render_file_picker(f: &mut Frame, app: &App) {
     }
 
     lines.push(modal_footer_line(
-        if app.is_fuzzy_file_picker() {
-            FUZZY_PICKER_FOOTER
-        } else {
-            BROWSER_PICKER_FOOTER
-        },
+        picker_footer(app.has_content(), app.is_fuzzy_file_picker(), false),
         theme.ui.toc_bg,
     ));
 
@@ -437,13 +471,7 @@ pub(super) fn render_picker_loading(f: &mut Frame, app: &App) {
 
     lines.push(Line::from(""));
     lines.push(modal_footer_line(
-        if is_failed {
-            PICKER_FAILED_FOOTER
-        } else if is_fuzzy {
-            FUZZY_PICKER_FOOTER
-        } else {
-            BROWSER_PICKER_FOOTER
-        },
+        picker_footer(app.has_content(), is_fuzzy, is_failed),
         theme.ui.toc_bg,
     ));
 
