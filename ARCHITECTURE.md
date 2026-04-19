@@ -8,25 +8,31 @@
   - reads the initial document or opens the file picker
   - initializes terminal + syntax/theme assets
 
-- `src/app.rs`
-  - central runtime state
-  - document content, TOC, search state, watch state
-  - theme picker + file picker state
-  - cache invalidation and document replacement helpers
+- `src/app/`
+  - `mod.rs` — central runtime state: document content, TOC, search, watch, editor config, mode detection (`has_content()`)
+  - `file_picker.rs` — fuzzy and browser picker state, async loading via thread + mpsc channel, queue/pending lifecycle
+  - `fuzzy.rs` — fuzzy matching algorithm and directory sort helpers
+  - `search.rs` — search state and match tracking
+  - `theme_picker.rs` — theme picker state with preview cache
 
-- `src/markdown.rs`
-  - Markdown parsing and render preparation
-  - heading, TOC, list, table, blockquote, code block rendering
-  - width-aware wrapping helpers
+- `src/markdown/`
+  - `mod.rs` — Markdown parsing and render preparation (headings, lists, blockquotes, code blocks)
+  - `toc.rs` — TOC extraction and normalization
+  - `tables.rs` — table rendering with alignment support
+  - `width.rs` — width-aware helpers
+  - `wrapping.rs` — line wrapping for constrained widths
 
-- `src/render.rs`
-  - draws the TUI with `ratatui`
-  - main content, TOC, status bar
-  - modal rendering for help, theme picker, and file picker
+- `src/render/`
+  - `mod.rs` — TUI layout orchestration with `ratatui`
+  - `content.rs` — main content panel and status bar rendering
+  - `modal.rs` — modal rendering for help, file picker, theme picker, editor picker, picker loading/failed states
+  - `status.rs` — status bar construction (brand, filename, search, watch, shortcuts, percentage)
+  - `toc.rs` — TOC sidebar rendering
 
 - `src/runtime.rs`
   - event loop
-  - keyboard/mouse handling
+  - keyboard/mouse handling with mode-aware branching (help → picker_loading → picker_failed → file_picker → theme_picker → editor_picker → search → normal)
+  - picker queue processing and poll loop
   - watch polling
   - resize-driven render width synchronization
 
@@ -34,6 +40,9 @@
   - UI and Markdown theme presets
   - active theme preset selection
   - syntect theme mapping
+
+- `src/editor.rs`
+  - editor detection, classification (terminal vs GUI), and launch
 
 - `src/cli.rs`
   - command-line parsing
@@ -43,8 +52,17 @@
   - raw mode / alternate screen lifecycle
   - terminal restore guarantees
 
-- `src/tests.rs`
-  - regression tests for rendering and state behavior
+- `src/update.rs`
+  - self-update: asset download, SHA256 verification, and binary replacement
+
+- `src/tests/`
+  - `app.rs` — app state and mode detection tests
+  - `file_picker.rs` — picker opening, fuzzy matching, sorting, truncation
+  - `editor.rs` — editor detection and classification
+  - `markdown.rs` — rendering regression tests
+  - `render.rs` — table and code block border alignment
+  - `theme.rs` — theme picker preview and restore
+  - `update.rs` — release asset matching and checksum verification
 
 ## Execution flow
 
@@ -53,10 +71,26 @@
    - a file argument, or
    - `stdin`, or
    - the file picker if no input is provided interactively.
-3. `markdown.rs` parses the source into rendered lines + TOC.
+3. `markdown/` parses the source into rendered lines + TOC.
 4. `App` stores the state and caches.
-5. `runtime.rs` runs the event loop.
-6. `render.rs` draws each frame from `App`.
+5. `runtime.rs` runs the event loop:
+   - processes pending picker queue → spawns loading thread
+   - polls picker loading → installs results when ready
+   - handles input events through mode-aware branching
+6. `render/` draws each frame from `App`.
+
+## Application modes
+
+- **Initial mode** (`!app.has_content()`): no file loaded, picker is the main view. Quit shortcuts exit the app.
+- **Preview mode** (`app.has_content()`): file loaded via argument, stdin, or picker selection. Quit shortcuts in pickers close the modal and return to the preview.
+
+## Picker lifecycle
+
+1. `queue_fuzzy_file_picker()` / `queue_file_picker()` sets `PendingPicker`
+2. Main loop calls `start_pending_picker_loading()` → spawns thread, creates `mpsc::channel`
+3. `poll_picker_loading()` does non-blocking `try_recv()` each tick (50ms)
+4. Thread completes → result installed via `install_loaded_file_picker()`
+5. Cancel: `cancel_picker_loading()` resets state to `Idle`, `Receiver` is dropped, thread finishes naturally
 
 ## Important state transitions
 
@@ -76,9 +110,3 @@
 - search:
   - query state lives in `App`
   - active match drives highlight + scroll position
-
-## Current hotspots
-
-- `src/app.rs` still centralizes many responsibilities
-- `src/markdown.rs` is the densest module and the main future split candidate
-- `src/render.rs` is growing as more modal UI is added
