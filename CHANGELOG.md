@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.11.0](https://github.com/RivoLink/leaf/releases/tag/1.11.0)] - 2026-04-19
+
+### Added
+
+- anytime fuzzy/browser picker ([#33](https://github.com/RivoLink/leaf/pull/33))
+
 ## [[1.10.2](https://github.com/RivoLink/leaf/releases/tag/1.10.2)] - 2026-04-18
 
 ### Docs
