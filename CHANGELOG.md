@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.11.1](https://github.com/RivoLink/leaf/releases/tag/1.11.1)] - 2026-04-20
+
+### Docs
+
+- update ARCHITECTURE.md ([#34](https://github.com/RivoLink/leaf/pull/34))
+
+### Changed
+
+- mouse selection shortcut ([#35](https://github.com/RivoLink/leaf/pull/35))
+
 ## [[1.11.0](https://github.com/RivoLink/leaf/releases/tag/1.11.0)] - 2026-04-19
 
 ### Added
