@@ -72,7 +72,7 @@ fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
 
 pub(super) fn render_help_popup(f: &mut Frame) {
     let theme = app_theme();
-    let area = centered_rect(54, 20, f.area());
+    let area = centered_rect(54, 21, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -114,11 +114,18 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("top/bottom", text_style),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled("Watch", section_style)]),
+        Line::from(vec![
+            Span::styled("Watch                        ", section_style),
+            Span::styled("Mouse", section_style),
+        ]),
         Line::from(vec![
             Span::styled("Ctrl+W, w  ", key_style),
             Span::styled("toggle watch", text_style),
             Span::raw("      "),
+            Span::styled("Shift+Sel  ", key_style),
+            Span::styled("select", text_style),
+        ]),
+        Line::from(vec![
             Span::styled("Ctrl+R, r  ", key_style),
             Span::styled("reload", text_style),
         ]),

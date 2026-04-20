@@ -126,6 +126,7 @@ cat TESTING.md | leaf
 | `g` / Home | Top |
 | `G` / End | Bottom |
 | `t` | Toggle TOC sidebar |
+| `Shift+Sel` | Select text |
 | `Shift+T` | Open theme picker |
 | `Shift+E` | Open editor picker |
 | `Shift+P` | Open file browser |
