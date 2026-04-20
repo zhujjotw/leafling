@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use crossterm::event::{self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{
     fs::OpenOptions,
     io,
@@ -412,7 +412,12 @@ pub(crate) fn run(
                     }
                 }
                 Event::Mouse(mouse) => {
+                    let prev_pos = app.mouse_position;
+                    app.mouse_position = (mouse.column, mouse.row);
                     let state_changed = if app.is_file_picker_open() || app.is_theme_picker_open() {
+                        if matches!(mouse.kind, MouseEventKind::Up(..)) {
+                            app.scrollbar_dragging = false;
+                        }
                         false
                     } else {
                         match mouse.kind {
@@ -423,6 +428,27 @@ pub(crate) fn run(
                             MouseEventKind::ScrollDown => {
                                 app.scroll_down(MOUSE_SCROLL_STEP);
                                 true
+                            }
+                            MouseEventKind::Down(..)
+                                if is_on_scrollbar(app.content_area, mouse.column, mouse.row) =>
+                            {
+                                app.scrollbar_dragging = true;
+                                scrollbar_scroll_to(app, mouse.row);
+                                true
+                            }
+                            MouseEventKind::Drag(..) if app.scrollbar_dragging => {
+                                scrollbar_scroll_to(app, mouse.row);
+                                true
+                            }
+                            MouseEventKind::Up(..) => {
+                                app.scrollbar_dragging = false;
+                                false
+                            }
+                            MouseEventKind::Moved if prev_pos != app.mouse_position => {
+                                let area = app.content_area;
+                                let (prev_col, prev_row) = prev_pos;
+                                is_on_scrollbar(area, prev_col, prev_row)
+                                    || is_on_scrollbar(area, mouse.column, mouse.row)
                             }
                             _ => false,
                         }
@@ -560,6 +586,25 @@ fn handle_open_in_editor(
         }
     }
     Ok(())
+}
+
+fn is_on_scrollbar(area: Rect, col: u16, row: u16) -> bool {
+    area.width > 0 && {
+        let sb_x = area.x + area.width - SCROLLBAR_WIDTH;
+        col >= sb_x && col < sb_x + SCROLLBAR_WIDTH && row >= area.y && row < area.y + area.height
+    }
+}
+
+fn scrollbar_scroll_to(app: &mut App, row: u16) {
+    let content_top = app.content_area.y as usize;
+    let content_height = app.content_area.height as usize;
+    let row = row as usize;
+    if row >= content_top && content_height > 1 {
+        let offset = (row - content_top).min(content_height - 1);
+        let max_scroll = app.total().saturating_sub(1);
+        let scroll_pos = offset * max_scroll / (content_height - 1);
+        app.scroll_to(scroll_pos);
+    }
 }
 
 fn sync_render_width(

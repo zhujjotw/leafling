@@ -36,6 +36,7 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
         toc::render_toc_panel(f, app, ta);
     }
 
+    app.content_area = content_area;
     let viewport_height = content_area.height as usize;
     content::render_content_panel(f, app, content_area, viewport_height);
     content::render_status_bar(f, app, root[1], viewport_height);

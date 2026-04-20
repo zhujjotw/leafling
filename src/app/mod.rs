@@ -7,7 +7,7 @@ use crate::{
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
     theme::{current_syntect_theme, current_theme_preset, theme_preset_index},
 };
-use ratatui::text::Line;
+use ratatui::{layout::Rect, text::Line};
 use std::{
     path::PathBuf,
     time::{Duration, Instant, SystemTime},
@@ -122,6 +122,9 @@ pub(crate) struct App {
     pub(super) theme_picker: ThemePickerState,
     pub(super) editor_picker: EditorPickerState,
     pub(super) render_width: usize,
+    pub(crate) content_area: Rect,
+    pub(crate) mouse_position: (u16, u16),
+    pub(crate) scrollbar_dragging: bool,
     pub(super) editor_config: Option<String>,
     pub(super) editor_flash: Option<(EditorFlash, Instant)>,
     watch_flash: Option<(WatchFlash, Instant)>,
@@ -236,6 +239,9 @@ impl App {
                 index: 0,
             },
             render_width: 80,
+            content_area: Rect::default(),
+            mouse_position: (0, 0),
+            scrollbar_dragging: false,
             editor_config: None,
             editor_flash: None,
             watch_flash: None,
@@ -622,6 +628,10 @@ impl App {
 
     pub(crate) fn scroll_bottom(&mut self) {
         self.scroll = self.total().saturating_sub(1);
+    }
+
+    pub(crate) fn scroll_to(&mut self, position: usize) {
+        self.scroll = position.min(self.total().saturating_sub(1));
     }
 
     pub(crate) fn toggle_toc(&mut self) {
