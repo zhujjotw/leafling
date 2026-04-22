@@ -7,8 +7,58 @@ pub(crate) fn line_plain_text(line: &Line<'_>) -> String {
     line.spans.iter().map(|s| s.content.as_ref()).collect()
 }
 
-pub(crate) fn build_plain_lines(lines: &[Line<'_>]) -> Vec<String> {
-    lines.iter().map(line_plain_text).collect()
+fn is_code_gutter_span(content: &str) -> bool {
+    let inner = content.strip_prefix('│').and_then(|s| s.strip_suffix('│'));
+    match inner {
+        Some(s) if !s.is_empty() => {
+            let mut has_digit = false;
+            for b in s.bytes() {
+                if b.is_ascii_digit() {
+                    has_digit = true;
+                } else if b != b' ' {
+                    return false;
+                }
+            }
+            has_digit
+        }
+        _ => false,
+    }
+}
+
+pub(crate) fn line_searchable_text(line: &Line<'_>) -> String {
+    let spans = &line.spans;
+    let has_pipe = spans.iter().take(4).any(|s| s.content.contains('│'));
+    if !has_pipe {
+        return line_plain_text(line);
+    }
+    let mut gutter_end = None;
+    for (i, span) in spans.iter().enumerate() {
+        if is_code_gutter_span(span.content.as_ref()) {
+            gutter_end = Some(i);
+            break;
+        }
+    }
+    let Some(ge) = gutter_end else {
+        return line_plain_text(line);
+    };
+    let last = spans.len().saturating_sub(1);
+    let start = ge + 1;
+    if start > last {
+        return String::new();
+    }
+    let end = if last > start && spans[last].content.as_ref() == "│" {
+        last
+    } else {
+        spans.len()
+    };
+    spans[start..end]
+        .iter()
+        .map(|s| s.content.as_ref())
+        .collect()
+}
+
+pub(crate) fn build_searchable_lines(lines: &[Line<'_>]) -> Vec<String> {
+    lines.iter().map(line_searchable_text).collect()
 }
 
 pub(crate) fn truncate_display_width(text: &str, max_width: usize) -> String {

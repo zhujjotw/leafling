@@ -1,5 +1,8 @@
 use super::width::display_width;
-use ratatui::text::{Line, Span};
+use ratatui::{
+    style::Style,
+    text::{Line, Span},
+};
 use unicode_width::UnicodeWidthChar;
 
 pub(super) fn push_wrapped_prefixed_lines(
@@ -156,5 +159,83 @@ pub(super) fn push_wrapped_prefixed_lines(
 
     if body_started {
         lines.push(Line::from(current_prefix));
+    }
+}
+
+pub(super) fn push_wrapped_code_lines(
+    lines: &mut Vec<Line<'static>>,
+    content_spans: Vec<Span<'static>>,
+    first_prefix: Vec<Span<'static>>,
+    continuation_prefix: Vec<Span<'static>>,
+    suffix_style: Style,
+    available_content_width: usize,
+) {
+    let mut chars: Vec<(char, Style)> = Vec::new();
+    for span in &content_spans {
+        let style = span.style;
+        for ch in span.content.chars() {
+            chars.push((ch, style));
+        }
+    }
+
+    if chars.is_empty() {
+        let pad = " ".repeat(available_content_width + 1);
+        let mut row = first_prefix;
+        row.push(Span::raw(format!(" {pad}")));
+        row.push(Span::styled("│", suffix_style));
+        lines.push(Line::from(row));
+        return;
+    }
+
+    let max_w = available_content_width.max(1);
+    let mut pos = 0;
+    let mut first_prefix = Some(first_prefix);
+
+    while pos < chars.len() {
+        let prefix = first_prefix
+            .take()
+            .unwrap_or_else(|| continuation_prefix.clone());
+
+        let mut row_chars: Vec<(char, Style)> = Vec::new();
+        let mut row_width = 0;
+
+        while pos < chars.len() {
+            let (ch, st) = chars[pos];
+            let ch_w = UnicodeWidthChar::width(ch).unwrap_or(0);
+            if row_width + ch_w > max_w && row_width > 0 {
+                break;
+            }
+            row_chars.push((ch, st));
+            row_width += ch_w;
+            pos += 1;
+        }
+
+        let mut row = prefix;
+        row.push(Span::raw(" "));
+
+        let mut current_style: Option<Style> = None;
+        let mut current_text = String::new();
+        for (ch, st) in &row_chars {
+            if current_style == Some(*st) {
+                current_text.push(*ch);
+            } else {
+                if !current_text.is_empty() {
+                    row.push(Span::styled(
+                        std::mem::take(&mut current_text),
+                        current_style.unwrap(),
+                    ));
+                }
+                current_style = Some(*st);
+                current_text.push(*ch);
+            }
+        }
+        if !current_text.is_empty() {
+            row.push(Span::styled(current_text, current_style.unwrap()));
+        }
+
+        let pad = max_w.saturating_sub(row_width);
+        row.push(Span::raw(" ".repeat(pad + 1)));
+        row.push(Span::styled("│", suffix_style));
+        lines.push(Line::from(row));
     }
 }

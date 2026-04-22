@@ -4,7 +4,9 @@ pub(crate) mod width;
 mod wrapping;
 
 use tables::{handle_table_event, start_table, TableBuf};
-pub(crate) use width::{build_plain_lines, display_width, line_plain_text, truncate_display_width};
+pub(crate) use width::{
+    build_searchable_lines, display_width, line_plain_text, truncate_display_width,
+};
 
 use crate::theme::{app_theme, MarkdownTheme};
 use pulldown_cmark::{CodeBlockKind, Event as MdEvent, HeadingLevel, Options, Parser, Tag, TagEnd};
@@ -23,7 +25,7 @@ use syntect::{
 use toc::{normalize_toc, TocEntry};
 use unicode_width::UnicodeWidthStr;
 use width::expand_tabs;
-use wrapping::push_wrapped_prefixed_lines;
+use wrapping::{push_wrapped_code_lines, push_wrapped_prefixed_lines};
 
 #[derive(Clone, Copy)]
 enum ListKind {
@@ -168,22 +170,24 @@ pub(crate) fn resolve_syntax<'a>(
         .unwrap_or_else(|| ss.find_syntax_plain_text())
 }
 
+struct CodeLine {
+    content_spans: Vec<Span<'static>>,
+}
+
 fn highlight_code(
     code: &str,
     lang: &str,
     ss: &SyntaxSet,
     theme: &Theme,
     render_width: usize,
-) -> (Vec<Line<'static>>, usize) {
-    let theme_colors = &app_theme().markdown;
+) -> (Vec<CodeLine>, usize, usize) {
     let syntax = resolve_syntax(lang, ss);
     let mut hl = HighlightLines::new(syntax, theme);
-    let gutter = Style::default().fg(theme_colors.code_gutter);
 
     let mut raw: Vec<(Vec<Span<'static>>, usize)> = Vec::new();
     for line_str in LinesWithEndings::from(code) {
         let regions = hl.highlight_line(line_str, ss).unwrap_or_default();
-        let mut spans = vec![Span::styled("│ ", gutter)];
+        let mut spans = Vec::new();
         let mut text_width: usize = 0;
         for (st, text) in &regions {
             let t = expand_tabs(text.trim_end_matches('\n'), text_width);
@@ -216,6 +220,9 @@ fn highlight_code(
     }
 
     let label = if lang.is_empty() { "text" } else { lang };
+    let total_lines = raw.len();
+    let digit_width = total_lines.max(1).to_string().len();
+    let gutter_width = digit_width + 2;
     let max_text = raw.iter().map(|(_, w)| *w).max().unwrap_or(0);
     let max_inner_width = render_width
         .saturating_sub(4)
@@ -223,16 +230,17 @@ fn highlight_code(
     let min_inner = (UnicodeWidthStr::width(label) + 3)
         .max(44)
         .min(max_inner_width);
-    let inner_width = (max_text + 2).max(min_inner);
+    let inner_width = (max_text + 2 + gutter_width)
+        .max(min_inner)
+        .min(max_inner_width);
 
     let mut out = Vec::new();
-    for (mut spans, text_width) in raw {
-        let pad = inner_width.saturating_sub(text_width + 1);
-        spans.push(Span::raw(" ".repeat(pad)));
-        spans.push(Span::styled("│", gutter));
-        out.push(Line::from(spans));
+    for (spans, _text_width) in raw {
+        out.push(CodeLine {
+            content_spans: spans,
+        });
     }
-    (out, inner_width)
+    (out, inner_width, digit_width)
 }
 
 fn block_prefix(in_bq: bool) -> Vec<Span<'static>> {
@@ -416,8 +424,12 @@ fn push_code_block_lines(
         code_lang.clone()
     };
     let available_width = ctx.render_width.saturating_sub(prefix_width);
-    let (code_lines, inner_width) =
+    let (code_lines, inner_width, digit_width) =
         highlight_code(code_buf, code_lang, ctx.ss, ctx.theme, available_width);
+    let gutter_width = digit_width + 2;
+    let gutter_style = Style::default().fg(ctx.theme_colors.code_gutter);
+    let content_width = inner_width.saturating_sub(gutter_width + 1);
+
     let header_width = UnicodeWidthStr::width(label.as_str()) + 3;
     let top_bar = "─".repeat(inner_width.saturating_sub(header_width));
     let mut header = prefix.clone();
@@ -436,14 +448,35 @@ fn push_code_block_lines(
         ),
     ]);
     lines.push(Line::from(header));
-    lines.extend(code_lines.into_iter().map(|line| {
-        let mut spans = prefix.clone();
-        spans.extend(line.spans);
-        Line::from(spans)
-    }));
+
+    for (i, code_line) in code_lines.into_iter().enumerate() {
+        let line_num = i + 1;
+        let num_gutter = Span::styled(format!("│{:>w$}│", line_num, w = digit_width), gutter_style);
+        let blank_gutter = Span::styled(format!("│{:>w$}│", "", w = digit_width), gutter_style);
+
+        let mut first_prefix = prefix.clone();
+        first_prefix.push(num_gutter);
+
+        let mut cont_prefix = prefix.clone();
+        cont_prefix.push(blank_gutter);
+
+        push_wrapped_code_lines(
+            lines,
+            code_line.content_spans,
+            first_prefix,
+            cont_prefix,
+            gutter_style,
+            content_width,
+        );
+    }
+
     let mut footer = prefix;
     footer.push(Span::styled(
-        format!("└{}┘", "─".repeat(inner_width)),
+        format!(
+            "└{}┴{}┘",
+            "─".repeat(gutter_width - 2),
+            "─".repeat(inner_width.saturating_sub(gutter_width - 1))
+        ),
         Style::default().fg(ctx.theme_colors.code_frame),
     ));
     lines.push(Line::from(footer));

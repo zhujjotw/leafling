@@ -1,6 +1,6 @@
 use crate::{
     markdown::{
-        build_plain_lines, hash_file_contents, hash_str, parse_markdown_with_width,
+        build_searchable_lines, hash_file_contents, hash_str, parse_markdown_with_width,
         read_file_state,
         toc::{should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry},
     },
@@ -179,7 +179,7 @@ impl App {
             filepath,
             last_file_state,
         } = config;
-        let plain_lines = build_plain_lines(&lines)
+        let plain_lines = build_searchable_lines(&lines)
             .into_iter()
             .map(|line| line.to_lowercase())
             .collect();
@@ -316,7 +316,7 @@ impl App {
     }
 
     pub(crate) fn replace_content(&mut self, lines: Vec<Line<'static>>, toc: Vec<TocEntry>) {
-        self.plain_lines = build_plain_lines(&lines)
+        self.plain_lines = build_searchable_lines(&lines)
             .into_iter()
             .map(|line| line.to_lowercase())
             .collect();
