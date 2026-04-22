@@ -1,5 +1,5 @@
 mod content;
-mod modal;
+mod popup;
 mod status;
 mod toc;
 
@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 #[cfg(test)]
-pub(crate) use modal::wrap_path_lines;
+pub(crate) use popup::wrap_path_lines;
 pub(crate) use status::build_status_bar;
 pub(crate) use toc::{build_toc_line_with_index, toc_header_line};
 
@@ -44,17 +44,17 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     content::render_status_bar(f, app, root[1], viewport_height);
 
     if app.is_help_open() {
-        modal::render_help_popup(f);
+        popup::render_help_popup(f, app);
     } else if app.is_picker_loading() || app.is_picker_load_failed() {
-        modal::render_picker_loading(f, app);
+        popup::render_picker_loading_popup(f, app);
     } else if app.is_file_picker_open() {
-        modal::render_file_picker(f, app);
+        popup::render_file_popup(f, app);
     } else if app.is_theme_picker_open() {
-        modal::render_theme_picker(f, app);
+        popup::render_theme_popup(f, app);
     } else if app.is_editor_picker_open() {
-        modal::render_editor_picker(f, app);
+        popup::render_editor_popup(f, app);
     } else if app.is_path_popup_open() {
-        modal::render_path_popup(f, app);
+        popup::render_path_popup(f, app);
     }
 }
 

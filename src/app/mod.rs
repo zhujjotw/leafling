@@ -472,6 +472,16 @@ impl App {
         self.path_popup_open
     }
 
+    pub(crate) fn is_popup_open(&self) -> bool {
+        self.help_open
+            || self.path_popup_open
+            || self.file_picker.open
+            || self.theme_picker.open
+            || self.editor_picker.open
+            || self.is_picker_loading()
+            || self.is_picker_load_failed()
+    }
+
     pub(crate) fn clear_reload_flash(&mut self) {
         self.reload_flash = None;
     }

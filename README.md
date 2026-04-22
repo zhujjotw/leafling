@@ -154,7 +154,7 @@ cat TESTING.md | leaf
 - ✅ Fuzzy Markdown picker when launched without a file, or anytime with `Ctrl+P`
 - ✅ Classic directory browser picker with `leaf --picker`, or anytime with `Shift+P`
 - ✅ Theme picker with runtime preview
-- ✅ Help modal with in-app shortcuts
+- ✅ Help popup with in-app shortcuts
 
 ## Typical AI Workflow
 

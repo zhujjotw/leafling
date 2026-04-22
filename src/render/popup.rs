@@ -38,7 +38,7 @@ const PICKER_FAILED_FOOTER_INIT: &[&str] = &["esc quit", "enter quit", "q quit"]
 
 const PICKER_FAILED_FOOTER_PREVIEW: &[&str] = &["esc close", "enter close", "ctrl+c close"];
 
-fn picker_footer(has_content: bool, is_fuzzy: bool, is_failed: bool) -> &'static [&'static str] {
+fn popup_footer(has_content: bool, is_fuzzy: bool, is_failed: bool) -> &'static [&'static str] {
     if has_content {
         if is_failed {
             PICKER_FAILED_FOOTER_PREVIEW
@@ -56,7 +56,7 @@ fn picker_footer(has_content: bool, is_fuzzy: bool, is_failed: bool) -> &'static
     }
 }
 
-fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
+fn popup_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
     let theme = app_theme();
     let shortcut_style = Style::default().fg(theme.ui.status_shortcut_fg).bg(bg);
     let separator_style = Style::default().fg(theme.ui.status_separator).bg(bg);
@@ -70,7 +70,7 @@ fn modal_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
     Line::from(spans)
 }
 
-pub(super) fn render_help_popup(f: &mut Frame) {
+pub(super) fn render_help_popup(f: &mut Frame, _app: &App) {
     let theme = app_theme();
     let area = centered_rect(54, 22, f.area());
     let section_style = Style::default()
@@ -164,7 +164,7 @@ pub(super) fn render_help_popup(f: &mut Frame) {
             Span::styled("toggle toc", text_style),
         ]),
         Line::from(""),
-        modal_footer_line(&["esc close", "? close"], theme.ui.toc_bg),
+        popup_footer_line(&["esc close", "? close"], theme.ui.toc_bg),
     ];
 
     f.render_widget(Clear, area);
@@ -181,7 +181,7 @@ pub(super) fn render_help_popup(f: &mut Frame) {
     );
 }
 
-pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
+pub(super) fn render_theme_popup(f: &mut Frame, app: &App) {
     let theme = app_theme();
     let area = centered_rect(43, 10, f.area());
     let active = app.theme_picker_reference_preset();
@@ -241,7 +241,7 @@ pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
         ]));
     }
     lines.push(Line::from(""));
-    lines.push(modal_footer_line(
+    lines.push(popup_footer_line(
         &["↑/↓ preview", "enter keep", "esc restore"],
         theme.ui.toc_bg,
     ));
@@ -260,7 +260,7 @@ pub(super) fn render_theme_picker(f: &mut Frame, app: &App) {
     );
 }
 
-pub(super) fn render_file_picker(f: &mut Frame, app: &App) {
+pub(super) fn render_file_popup(f: &mut Frame, app: &App) {
     let theme = app_theme();
     let area = centered_rect(78, 20, f.area());
     let title_style = Style::default()
@@ -406,8 +406,8 @@ pub(super) fn render_file_picker(f: &mut Frame, app: &App) {
         lines.push(Line::from(""));
     }
 
-    lines.push(modal_footer_line(
-        picker_footer(app.has_content(), app.is_fuzzy_file_picker(), false),
+    lines.push(popup_footer_line(
+        popup_footer(app.has_content(), app.is_fuzzy_file_picker(), false),
         theme.ui.toc_bg,
     ));
 
@@ -425,7 +425,7 @@ pub(super) fn render_file_picker(f: &mut Frame, app: &App) {
     );
 }
 
-pub(super) fn render_picker_loading(f: &mut Frame, app: &App) {
+pub(super) fn render_picker_loading_popup(f: &mut Frame, app: &App) {
     let theme = app_theme();
     let area = centered_rect(78, 20, f.area());
     let title_style = Style::default()
@@ -481,8 +481,8 @@ pub(super) fn render_picker_loading(f: &mut Frame, app: &App) {
     }
 
     lines.push(Line::from(""));
-    lines.push(modal_footer_line(
-        picker_footer(app.has_content(), is_fuzzy, is_failed),
+    lines.push(popup_footer_line(
+        popup_footer(app.has_content(), is_fuzzy, is_failed),
         theme.ui.toc_bg,
     ));
 
@@ -587,7 +587,7 @@ fn highlighted_picker_label(
     spans
 }
 
-pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
+pub(super) fn render_editor_popup(f: &mut Frame, app: &App) {
     let theme = app_theme();
     let entries = app.editor_picker_entries();
     let selected = app.editor_picker_index();
@@ -677,7 +677,7 @@ pub(super) fn render_editor_picker(f: &mut Frame, app: &App) {
     }
 
     lines.push(Line::from(""));
-    lines.push(modal_footer_line(
+    lines.push(popup_footer_line(
         &["↑/↓ move", "enter confirm", "esc cancel"],
         theme.ui.toc_bg,
     ));
@@ -768,7 +768,7 @@ pub(super) fn render_path_popup(f: &mut Frame, app: &App) {
     lines.extend(rel_lines);
     lines.extend(abs_lines);
     lines.push(Line::from(""));
-    lines.push(modal_footer_line(
+    lines.push(popup_footer_line(
         &["enter close", "esc close"],
         theme.ui.toc_bg,
     ));

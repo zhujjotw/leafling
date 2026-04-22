@@ -427,10 +427,7 @@ pub(crate) fn run(
                 Event::Mouse(mouse) => {
                     let prev_pos = app.mouse_position;
                     app.mouse_position = (mouse.column, mouse.row);
-                    let state_changed = if app.is_file_picker_open()
-                        || app.is_theme_picker_open()
-                        || app.is_path_popup_open()
-                    {
+                    let state_changed = if app.is_popup_open() {
                         if matches!(mouse.kind, MouseEventKind::Up(..)) {
                             app.scrollbar_dragging = false;
                         }

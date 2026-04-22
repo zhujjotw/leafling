@@ -25,7 +25,7 @@
 - `src/render/`
   - `mod.rs` — TUI layout orchestration with `ratatui`
   - `content.rs` — main content panel and status bar rendering
-  - `modal.rs` — modal rendering for help, file picker, theme picker, editor picker, picker loading/failed states
+  - `popup.rs` — popup rendering for help, file picker, theme picker, editor picker, picker loading/failed states
   - `status.rs` — status bar construction (brand, filename, search, watch, shortcuts, percentage)
   - `toc.rs` — TOC sidebar rendering
 
@@ -82,7 +82,7 @@
 ## Application modes
 
 - **Initial mode** (`!app.has_content()`): no file loaded, picker is the main view. Quit shortcuts exit the app.
-- **Preview mode** (`app.has_content()`): file loaded via argument, stdin, or picker selection. Quit shortcuts in pickers close the modal and return to the preview.
+- **Preview mode** (`app.has_content()`): file loaded via argument, stdin, or picker selection. Quit shortcuts in pickers close the popup and return to the preview.
 
 ## Picker lifecycle
 
