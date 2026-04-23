@@ -1,3 +1,4 @@
+mod latex;
 mod tables;
 pub(crate) mod toc;
 pub(crate) mod width;
@@ -485,6 +486,100 @@ fn push_code_block_lines(
     code_buf.clear();
 }
 
+fn push_latex_block_lines(
+    lines: &mut Vec<Line<'static>>,
+    content: &str,
+    render_width: usize,
+    theme: &MarkdownTheme,
+    blockquote_depth: usize,
+    list_stack: &[ListKind],
+    item_stack: &mut [ItemState],
+) {
+    let prefix = if !item_stack.is_empty() {
+        list_item_prefix(blockquote_depth > 0, list_stack, item_stack)
+    } else if blockquote_depth > 0 {
+        block_prefix(true)
+    } else {
+        Vec::new()
+    };
+    let prefix_width: usize = prefix
+        .iter()
+        .map(|span| display_width(span.content.as_ref()))
+        .sum();
+    let available_width = render_width.saturating_sub(prefix_width);
+    let frame_style = Style::default().fg(theme.code_frame);
+    let label_style = Style::default().fg(theme.code_label);
+    let gutter_style = Style::default().fg(theme.code_gutter);
+    let content_style = Style::default().fg(theme.latex_block_fg);
+
+    let label = "latex";
+    let rendered_content = latex::to_unicode(content);
+    let content_lines: Vec<&str> = rendered_content.lines().collect();
+    let total_lines = content_lines.len().max(1);
+    let digit_width = total_lines.to_string().len();
+    let gutter_width = digit_width + 2;
+
+    let max_text = content_lines
+        .iter()
+        .map(|l| display_width(l))
+        .max()
+        .unwrap_or(0);
+    let max_inner_width = available_width
+        .saturating_sub(2)
+        .max(UnicodeWidthStr::width(label) + 3);
+    let min_inner = (UnicodeWidthStr::width(label) + 3)
+        .max(44)
+        .min(max_inner_width);
+    let inner_width = (max_text + 2 + gutter_width)
+        .max(min_inner)
+        .min(max_inner_width);
+    let content_width = inner_width.saturating_sub(gutter_width + 1);
+
+    let header_width = UnicodeWidthStr::width(label) + 3;
+    let top_bar = "─".repeat(inner_width.saturating_sub(header_width));
+    let mut header = prefix.clone();
+    header.extend([
+        Span::styled("┌─ ".to_string(), frame_style),
+        Span::styled(format!("{label} "), label_style),
+        Span::styled(format!("{top_bar}┐"), frame_style),
+    ]);
+    lines.push(Line::from(header));
+
+    for (i, content_line) in content_lines.iter().enumerate() {
+        let line_num = i + 1;
+        let num_gutter = Span::styled(format!("│{:>w$}│", line_num, w = digit_width), gutter_style);
+        let blank_gutter = Span::styled(format!("│{:>w$}│", "", w = digit_width), gutter_style);
+        let content_spans = vec![Span::styled(content_line.to_string(), content_style)];
+
+        let mut first_prefix = prefix.clone();
+        first_prefix.push(num_gutter);
+
+        let mut cont_prefix = prefix.clone();
+        cont_prefix.push(blank_gutter);
+
+        push_wrapped_code_lines(
+            lines,
+            content_spans,
+            first_prefix,
+            cont_prefix,
+            gutter_style,
+            content_width,
+        );
+    }
+
+    let mut footer = prefix;
+    footer.push(Span::styled(
+        format!(
+            "└{}┴{}┘",
+            "─".repeat(gutter_width - 2),
+            "─".repeat(inner_width.saturating_sub(gutter_width - 1))
+        ),
+        frame_style,
+    ));
+    lines.push(Line::from(footer));
+    lines.push(Line::from(""));
+}
+
 fn inline_text_style(
     theme: &MarkdownTheme,
     blockquote_depth: usize,
@@ -617,6 +712,16 @@ fn push_inline_code_span(spans: &mut Vec<Span<'static>>, text: &str, theme: &Mar
         Style::default()
             .fg(theme.inline_code_fg)
             .bg(theme.inline_code_bg),
+    ));
+}
+
+fn push_inline_latex_span(spans: &mut Vec<Span<'static>>, text: &str, theme: &MarkdownTheme) {
+    let rendered = latex::to_unicode(text);
+    spans.push(Span::styled(
+        format!(" {rendered} "),
+        Style::default()
+            .fg(theme.latex_inline_fg)
+            .bg(theme.latex_inline_bg),
     ));
 }
 
@@ -862,20 +967,34 @@ pub(crate) fn parse_markdown_with_width(
             }
             MdEvent::End(TagEnd::CodeBlock) => {
                 in_code = false;
-                push_code_block_lines(
-                    &mut lines,
-                    &mut code_buf,
-                    &mut code_lang,
-                    CodeBlockRenderContext {
-                        ss,
-                        theme,
+                if code_lang == "latex" || code_lang == "tex" {
+                    push_latex_block_lines(
+                        &mut lines,
+                        &code_buf,
                         render_width,
                         theme_colors,
                         blockquote_depth,
-                        list_stack: &list_stack,
-                    },
-                    &mut item_stack,
-                );
+                        &list_stack,
+                        &mut item_stack,
+                    );
+                    code_buf.clear();
+                    code_lang.clear();
+                } else {
+                    push_code_block_lines(
+                        &mut lines,
+                        &mut code_buf,
+                        &mut code_lang,
+                        CodeBlockRenderContext {
+                            ss,
+                            theme,
+                            render_width,
+                            theme_colors,
+                            blockquote_depth,
+                            list_stack: &list_stack,
+                        },
+                        &mut item_stack,
+                    );
+                }
                 last_block = LastBlock::Other;
             }
             MdEvent::Code(text) => {
@@ -935,6 +1054,25 @@ pub(crate) fn parse_markdown_with_width(
                     &mut item_stack,
                     render_width,
                 );
+            }
+            MdEvent::InlineMath(text) => {
+                push_inline_latex_span(&mut spans, text.as_ref(), theme_colors);
+            }
+            MdEvent::DisplayMath(text) => {
+                if !spans.is_empty() {
+                    lines.push(Line::from(std::mem::take(&mut spans)));
+                }
+                trim_paragraph_gap_before_block(&mut lines, last_block);
+                push_latex_block_lines(
+                    &mut lines,
+                    text.as_ref(),
+                    render_width,
+                    theme_colors,
+                    blockquote_depth,
+                    &list_stack,
+                    &mut item_stack,
+                );
+                last_block = LastBlock::Other;
             }
             _ => {}
         }

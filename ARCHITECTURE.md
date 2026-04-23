@@ -16,7 +16,8 @@
   - `theme_picker.rs` — theme picker state with preview cache
 
 - `src/markdown/`
-  - `mod.rs` — Markdown parsing and render preparation (headings, lists, blockquotes, code blocks)
+  - `mod.rs` — Markdown parsing and render preparation (headings, lists, blockquotes, code blocks, LaTeX)
+  - `latex.rs` — LaTeX-to-Unicode conversion: `unicodeit` + postprocessing for `\frac`, `\sqrt`, `^{}`, `_{}`
   - `toc.rs` — TOC extraction and normalization
   - `tables.rs` — table rendering with alignment support
   - `width.rs` — width-aware helpers

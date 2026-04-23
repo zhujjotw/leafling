@@ -48,6 +48,8 @@ Confirm these render correctly:
 - tables with left, center, and right alignment
 - fenced code blocks with language labels
 - wide characters such as `東京`
+- inline math formulas with `$...$`
+- display math blocks with `$$...$$`
 
 ### Navigation And Search
 
@@ -90,7 +92,7 @@ Confirm each command exits cleanly and does not leave the terminal in raw mode o
 
 ## Notes
 
-The fixture intentionally includes repeated search terms, loose list items, ordered lists starting at non-`1` values, tables, code blocks, and wide characters because those are easy places for terminal Markdown renderers to regress.
+The fixture intentionally includes repeated search terms, loose list items, ordered lists starting at non-`1` values, tables, code blocks, wide characters, and math formulas because those are easy places for terminal Markdown renderers to regress.
 
 ## Manual Fixture
 
@@ -213,6 +215,79 @@ search:
   primary: tokyo-signal
   secondary: unicode-width-check
 ```
+
+### Math Inline
+
+The Pythagorean theorem states that $a^2 + b^2 = c^2$ in a right triangle.
+
+Einstein's famous equation $E = mc^2$ relates energy and mass.
+
+This paragraph mixes **bold with $x^2 + y^2$** and *italic with $\alpha + \beta$* and `code` to check style interactions.
+
+The area of a circle is $A = \pi r^2$ and its circumference is $C = 2\pi r$.
+
+A sum $\sum_{i=1}^{n} x_i$ and an integral $\int_0^1 f(x)\,dx$ inline.
+
+### Math Display
+
+$$E = mc^2$$
+
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+
+$$\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}$$
+
+$$\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}$$
+
+$$\nabla \times \vec{E} = -\frac{\partial \vec{B}}{\partial t}$$
+
+### Math in Context
+
+#### Math in Blockquote
+
+> Euler's identity: $e^{i\pi} + 1 = 0$
+>
+> As a display block:
+>
+> $$e^{i\pi} + 1 = 0$$
+
+#### Math in List
+
+- Newton's first law: $F = 0 \Rightarrow \Delta v = 0$
+- Newton's second law: $F = ma$
+- Gravitation: $F = G\frac{m_1 m_2}{r^2}$
+
+1. Quadratic: $ax^2 + bx + c = 0$
+2. Solution: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$
+
+#### Math with Unicode Symbols
+
+Symbols render correctly: ∀x ∈ ℝ, ∃y such that x + y = 0.
+
+Greek letters: α β γ δ ε π σ ω and uppercase Γ Δ Σ Ω.
+
+Superscripts and subscripts: x⁰ x¹ x² x³ x⁴ aₙ = aₙ₋₁ + aₙ₋₂.
+
+Operators: ≤ ≥ ≠ ≈ ± × ÷ → ⇒ ⇔ ∪ ∩ ⊂ ∅ ∞.
+
+#### LaTeX Code Block
+
+```latex
+\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+```
+
+```latex
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+```
+
+```tex
+\nabla \times \vec{E} = -\frac{\partial \vec{B}}{\partial t}
+```
+
+#### Dollar Sign (No Math)
+
+This costs $5.00 and that costs $10 each.
 
 ### Wide Characters
 

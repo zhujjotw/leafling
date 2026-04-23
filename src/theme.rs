@@ -89,6 +89,9 @@ pub(crate) struct MarkdownTheme {
     pub(crate) blockquote_text: Color,
     pub(crate) text: Color,
     pub(crate) strong_text: Color,
+    pub(crate) latex_inline_fg: Color,
+    pub(crate) latex_inline_bg: Color,
+    pub(crate) latex_block_fg: Color,
 }
 
 const BASE_LIGHT_UI: UiTheme = UiTheme {
@@ -190,6 +193,9 @@ const BASE_LIGHT_MARKDOWN: MarkdownTheme = MarkdownTheme {
     blockquote_text: Color::Rgb(114, 116, 158),
     text: Color::Rgb(58, 68, 78),
     strong_text: Color::Rgb(26, 32, 40),
+    latex_inline_fg: Color::Rgb(128, 68, 148),
+    latex_inline_bg: Color::Rgb(236, 226, 240),
+    latex_block_fg: Color::Rgb(108, 58, 128),
 };
 
 const BASE_DARK_MARKDOWN: MarkdownTheme = MarkdownTheme {
@@ -219,6 +225,9 @@ const BASE_DARK_MARKDOWN: MarkdownTheme = MarkdownTheme {
     blockquote_text: Color::Rgb(148, 148, 195),
     text: Color::Rgb(208, 210, 218),
     strong_text: Color::Rgb(245, 245, 255),
+    latex_inline_fg: Color::Rgb(200, 160, 225),
+    latex_inline_bg: Color::Rgb(38, 28, 48),
+    latex_block_fg: Color::Rgb(195, 155, 220),
 };
 
 pub(crate) const ARCTIC_THEME: AppTheme = AppTheme {
@@ -291,6 +300,9 @@ pub(crate) const FOREST_THEME: AppTheme = AppTheme {
         blockquote_text: Color::Rgb(160, 168, 188),
         text: Color::Rgb(212, 218, 212),
         strong_text: Color::Rgb(246, 248, 246),
+        latex_inline_fg: Color::Rgb(192, 162, 218),
+        latex_inline_bg: Color::Rgb(34, 28, 42),
+        latex_block_fg: Color::Rgb(188, 158, 214),
     },
 };
 
@@ -364,6 +376,9 @@ pub(crate) const SOLARIZED_DARK_THEME: AppTheme = AppTheme {
         blockquote_text: Color::Rgb(131, 148, 150),
         text: Color::Rgb(147, 161, 161),
         strong_text: Color::Rgb(238, 232, 213),
+        latex_inline_fg: Color::Rgb(108, 113, 196),
+        latex_inline_bg: Color::Rgb(14, 48, 58),
+        latex_block_fg: Color::Rgb(108, 113, 196),
     },
 };
 

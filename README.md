@@ -147,6 +147,8 @@ cat TESTING.md | leaf
 - ✅ TOC sidebar with active section tracking and two-level navigation
 - ✅ Search with match highlighting, `/`, `Ctrl+F`, and `n` / `N`
 - ✅ Code blocks `┌─ lang ───┐`
+- ✅ LaTeX math rendering — inline `$...$` and display `$$...$$` with Unicode conversion via `unicodeit`
+- ✅ LaTeX code blocks `` ```latex `` / `` ```tex `` rendered as formula blocks
 - ✅ Bold, italic, strikethrough, blockquotes, lists, and horizontal rules
 - ✅ YAML frontmatter is ignored in both preview and TOC
 - ✅ Native stdin input with bounded size

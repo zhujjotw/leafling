@@ -362,3 +362,73 @@ fn code_block_inside_list_item_is_indented_and_has_no_blank_gap_before() {
     assert!(rendered[header_idx].starts_with("  "));
     assert!(rendered[code_idx].starts_with("  "));
 }
+
+#[test]
+fn inline_latex_renders_with_latex_style() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("The formula $x^2 + y^2$ is here.\n", &ss, &theme);
+
+    let latex_line = lines
+        .iter()
+        .find(|line| line_plain_text(line).contains("x² + y²"))
+        .expect("expected a line containing inline latex content");
+
+    let latex_span = latex_line
+        .spans
+        .iter()
+        .find(|span| span.content.contains("x² + y²"))
+        .expect("expected a span with latex content");
+
+    assert!(
+        latex_span.style.bg.is_some(),
+        "inline latex should have a background color"
+    );
+}
+
+#[test]
+fn display_latex_renders_in_framed_block() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("$$E = mc^2$$\n", &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    assert!(
+        rendered.iter().any(|line| line.contains("┌─ latex")),
+        "expected latex block header"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("E = mc²")),
+        "expected latex content"
+    );
+    assert!(
+        rendered.iter().any(|line| line.contains("└")),
+        "expected latex block footer"
+    );
+}
+
+#[test]
+fn inline_latex_is_searchable() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("Check $\\alpha + \\beta$ here.\n", &ss, &theme);
+    let searchable: Vec<String> = lines.iter().map(line_plain_text).collect();
+
+    assert!(
+        searchable.iter().any(|line| line.contains("α + β")),
+        "latex content should be searchable"
+    );
+}
+
+#[test]
+fn display_latex_in_blockquote_has_quote_prefix() {
+    let (ss, theme) = test_assets();
+    let (lines, _) = parse_markdown("> $$F = ma$$\n", &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+
+    let header = rendered
+        .iter()
+        .find(|line| line.contains("┌─ latex"))
+        .expect("expected latex block header in blockquote");
+    assert!(
+        header.starts_with('▏'),
+        "latex block in blockquote should have quote prefix"
+    );
+}
