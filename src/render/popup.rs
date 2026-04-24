@@ -748,7 +748,12 @@ pub(super) fn render_path_popup(f: &mut Frame, app: &App) {
             .ok()
             .and_then(|cwd| abs.strip_prefix(&cwd).ok().map(|p| p.to_path_buf()))
             .unwrap_or_else(|| path.to_path_buf());
-        (rel.display().to_string(), abs.display().to_string())
+        let abs_str = abs.display().to_string();
+        let abs_str = abs_str
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&abs_str)
+            .to_string();
+        (rel.display().to_string(), abs_str)
     } else {
         ("(stdin)".to_string(), "(stdin)".to_string())
     };
