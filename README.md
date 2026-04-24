@@ -144,23 +144,15 @@ cat TESTING.md | leaf
 
 ## Features
 
-- ✅ **Watch mode** `--watch` / `-w` — reloads every 250ms, with `⟳ reloaded` flash feedback
-- ✅ `leaf --watch` can start from the picker and begin watching after file selection
-- ✅ Syntax highlighting with common language aliases like `py`, `cpp`, `json`, `toml`, `ps1`, and `dockerfile`
-- ✅ Unicode box-drawing tables with left / center / right alignment
-- ✅ TOC sidebar with active section tracking and two-level navigation
-- ✅ Search with match highlighting, `/`, `Ctrl+F`, and `n` / `N`
-- ✅ Code blocks `┌─ lang ───┐`
-- ✅ LaTeX math rendering — inline `$...$` and display `$$...$$` with Unicode conversion via `unicodeit`
-- ✅ LaTeX code blocks `` ```latex `` / `` ```tex `` rendered as formula blocks
-- ✅ Bold, italic, strikethrough, blockquotes, lists, and horizontal rules
-- ✅ YAML frontmatter is ignored in both preview and TOC
-- ✅ Native stdin input with bounded size
-- ✅ `leaf --update` to fetch, verify via published SHA256, and install the latest release on supported platforms
-- ✅ Fuzzy Markdown picker when launched without a file, or anytime with `Ctrl+P`
-- ✅ Classic directory browser picker with `leaf --picker`, or anytime with `Shift+P`
-- ✅ Theme picker with runtime preview
-- ✅ Help popup with in-app shortcuts
+- **Live preview** — Watch mode with automatic reload and visual feedback.
+- **File picker** — Fuzzy Markdown picker, directory browser, and watch after selection.
+- **Editor integration** — Open the current file in your preferred editor.
+- **Rich Markdown rendering** — Tables, lists, blockquotes, rules, bold, italic, and strikethrough.
+- **Syntax highlighting** — Common aliases like `py`, `cpp`, `json`, `toml`, `ps1`, `dockerfile`.
+- **LaTeX support** — Inline, block, and `latex` / `tex` code blocks rendered as formulas.
+- **Navigation** — TOC sidebar, active section tracking, heading jumps, and search.
+- **Terminal UX** — Theme picker, help popup, file path popup, mouse and keyboard support.
+- **CLI friendly** — stdin support and `leaf --update` with SHA256 verification.
 
 ## Typical AI Workflow
 
@@ -171,13 +163,6 @@ aichat "..." > notes.md
 # Terminal 2: live watch
 leaf --watch notes.md
 ```
-
-## Roadmap
-
-- [x] Themes (light / custom)
-- [ ] Copy code block `y`
-- [ ] Code block horizontal scroll
-- [ ] Improve search performance on large files
 
 ## Troubleshooting
 
