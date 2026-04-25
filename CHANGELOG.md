@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.15.4](https://github.com/RivoLink/leaf/releases/tag/1.15.4)] - 2026-04-25
+
+### Fixed
+
+- inline code/latex in tables ([#50](https://github.com/RivoLink/leaf/pull/50))
+
 ## [[1.15.3](https://github.com/RivoLink/leaf/releases/tag/1.15.3)] - 2026-04-24
 
 ### Fixed
