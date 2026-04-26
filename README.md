@@ -7,7 +7,8 @@
 </p>
 
 <p align="center">
-  <img src="images/preview.png" alt="leaf" width="710px" />
+  <img src="images/preview.png" alt="leaf" width="710px" /><br>
+  <sub>See more screenshots in the <a href="demo/README.md">features</a> demo</sub>
 </p>
 
 ## Install
