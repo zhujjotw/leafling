@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EditorKind {
@@ -276,12 +276,18 @@ pub(crate) fn open_in_editor(
             Command::new(&exec)
                 .args(&args)
                 .arg(file)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .spawn()
                 .map_err(|e| format!("{bin}: {e}"))?;
             Ok(EditorResult::Opened)
         }
         EditorKind::Terminal => {
             if let Some(mut cmd) = try_new_tab_command(editor, file, emulator) {
+                cmd.stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
                 if cmd.spawn().is_ok() {
                     return Ok(EditorResult::Opened);
                 }
