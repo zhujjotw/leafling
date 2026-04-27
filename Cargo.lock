@@ -707,7 +707,7 @@ dependencies = [
 
 [[package]]
 name = "leaf"
-version = "1.15.5"
+version = "1.15.6"
 dependencies = [
  "anyhow",
  "crossterm",

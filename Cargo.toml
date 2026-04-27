@@ -1,6 +1,6 @@
 [package]
 name = "leaf"
-version = "1.15.5"
+version = "1.15.6"
 edition = "2021"
 description = "A friendly terminal Markdown previewer"
 license = "MIT"
