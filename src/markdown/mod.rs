@@ -358,10 +358,13 @@ fn push_heading_lines(
         3 => theme.heading_3,
         _ => theme.heading_other,
     };
-    let heading_style = Style::default().fg(color).add_modifier(match level {
-        1..=3 => Modifier::BOLD,
-        _ => Modifier::empty(),
-    });
+    let modifier = match level {
+        1 | 2 => Modifier::BOLD,
+        3 | 4 => Modifier::BOLD | Modifier::UNDERLINED,
+        5 => Modifier::UNDERLINED,
+        _ => Modifier::ITALIC | Modifier::DIM,
+    };
+    let heading_style = Style::default().fg(color).add_modifier(modifier);
     let title: String = spans.iter().map(|s| s.content.as_ref()).collect();
     toc.push(TocEntry {
         level,
@@ -375,18 +378,16 @@ fn push_heading_lines(
             if span.style.bg.is_some() {
                 style.fg = span.style.fg;
                 style.bg = span.style.bg;
-                style.sub_modifier = Modifier::BOLD;
+                style.sub_modifier = modifier.difference(Modifier::UNDERLINED);
+            } else if span.style.fg == Some(theme.link_text)
+                || span.style.fg == Some(theme.link_icon)
+            {
+                style.fg = span.style.fg;
             }
             Span::styled(span.content, style)
         })
         .collect();
-    if level == 3 {
-        let mut s = styled_spans;
-        s.push(Span::styled(" ", heading_style));
-        lines.push(Line::from(s));
-    } else {
-        lines.push(Line::from(styled_spans));
-    };
+    lines.push(Line::from(styled_spans));
 
     match level {
         1 => lines.push(Line::from(Span::styled(
@@ -780,7 +781,9 @@ fn heading_level(level: HeadingLevel) -> u8 {
         HeadingLevel::H1 => 1,
         HeadingLevel::H2 => 2,
         HeadingLevel::H3 => 3,
-        _ => 4,
+        HeadingLevel::H4 => 4,
+        HeadingLevel::H5 => 5,
+        HeadingLevel::H6 => 6,
     }
 }
 
