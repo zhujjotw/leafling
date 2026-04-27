@@ -9,31 +9,41 @@ use unicode_width::UnicodeWidthChar;
 use super::latex;
 use super::width::{display_width, expand_tabs};
 
+#[derive(Clone, Copy, Default)]
+struct CellInlineStyle {
+    bold: bool,
+    italic: bool,
+    strikethrough: bool,
+    link: bool,
+}
+
 #[derive(Clone)]
 enum CellFragment {
-    Text(String),
+    Text(String, CellInlineStyle),
     Code(String),
     InlineMath(String),
+    LinkMarker,
 }
 
 impl CellFragment {
     fn rendered_text(&self) -> String {
         match self {
-            CellFragment::Text(t) | CellFragment::Code(t) => t.clone(),
+            CellFragment::Text(t, _) | CellFragment::Code(t) => t.clone(),
             CellFragment::InlineMath(t) => latex::to_unicode(t),
+            CellFragment::LinkMarker => "⌗".to_string(),
         }
     }
 
     fn display_width(&self) -> usize {
         let w = display_width(&self.rendered_text());
         match self {
-            CellFragment::Text(_) => w,
+            CellFragment::Text(_, _) | CellFragment::LinkMarker => w,
             _ => w + 2,
         }
     }
 
     fn is_text(&self) -> bool {
-        matches!(self, CellFragment::Text(_))
+        matches!(self, CellFragment::Text(_, _))
     }
 }
 
@@ -44,6 +54,7 @@ pub(super) struct TableBuf {
     current_row: Vec<Vec<CellFragment>>,
     current_cell: Vec<CellFragment>,
     pub(super) in_header: bool,
+    inline_style: CellInlineStyle,
 }
 
 struct TableBorder<'a> {
@@ -94,12 +105,39 @@ pub(super) fn handle_table_event(
             tb.end_header();
             true
         }
-        MdEvent::Start(Tag::Strong)
-        | MdEvent::End(TagEnd::Strong)
-        | MdEvent::Start(Tag::Emphasis)
-        | MdEvent::End(TagEnd::Emphasis)
-        | MdEvent::Start(Tag::Link { .. })
-        | MdEvent::End(TagEnd::Link) => true,
+        MdEvent::Start(Tag::Strong) => {
+            tb.inline_style.bold = true;
+            true
+        }
+        MdEvent::End(TagEnd::Strong) => {
+            tb.inline_style.bold = false;
+            true
+        }
+        MdEvent::Start(Tag::Emphasis) => {
+            tb.inline_style.italic = true;
+            true
+        }
+        MdEvent::End(TagEnd::Emphasis) => {
+            tb.inline_style.italic = false;
+            true
+        }
+        MdEvent::Start(Tag::Strikethrough) => {
+            tb.inline_style.strikethrough = true;
+            true
+        }
+        MdEvent::End(TagEnd::Strikethrough) => {
+            tb.inline_style.strikethrough = false;
+            true
+        }
+        MdEvent::Start(Tag::Link { .. }) => {
+            tb.inline_style.link = true;
+            tb.push_link_marker();
+            true
+        }
+        MdEvent::End(TagEnd::Link) => {
+            tb.inline_style.link = false;
+            true
+        }
         MdEvent::End(TagEnd::Table) => {
             let rendered = tb.render(render_width);
             lines.extend(rendered);
@@ -123,10 +161,15 @@ impl TableBuf {
             current_row: vec![],
             current_cell: vec![],
             in_header: false,
+            inline_style: CellInlineStyle::default(),
         }
     }
     fn push_text(&mut self, t: &str) {
-        self.current_cell.push(CellFragment::Text(t.to_string()));
+        self.current_cell
+            .push(CellFragment::Text(t.to_string(), self.inline_style));
+    }
+    fn push_link_marker(&mut self) {
+        self.current_cell.push(CellFragment::LinkMarker);
     }
     fn push_code(&mut self, t: &str) {
         self.current_cell.push(CellFragment::Code(t.to_string()));
@@ -137,13 +180,14 @@ impl TableBuf {
     }
     fn end_cell(&mut self) {
         let mut frags = std::mem::take(&mut self.current_cell);
-        if let Some(CellFragment::Text(t)) = frags.first_mut() {
+        if let Some(CellFragment::Text(t, _)) = frags.first_mut() {
             *t = t.trim_start().to_string();
         }
-        if let Some(CellFragment::Text(t)) = frags.last_mut() {
+        if let Some(CellFragment::Text(t, _)) = frags.last_mut() {
             *t = t.trim_end().to_string();
         }
         self.current_row.push(frags);
+        self.inline_style = CellInlineStyle::default();
     }
     fn end_row(&mut self) {
         let row = std::mem::take(&mut self.current_row);
@@ -223,7 +267,7 @@ impl TableBuf {
                     let frags = wrapped_cells[ci].get(line_idx).unwrap_or(&empty_cell);
                     let align = self.alignments.get(ci).copied().unwrap_or(Alignment::None);
                     let base_style = if is_hdr { header } else { cell };
-                    let cell_spans = align_cell(frags, width, align, base_style, theme);
+                    let cell_spans = align_cell(frags, width, align, base_style, is_hdr, theme);
                     spans.push(Span::raw(" "));
                     spans.extend(cell_spans);
                     spans.push(Span::raw(" "));
@@ -369,11 +413,13 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
     let mut lines: Vec<Vec<CellFragment>> = Vec::new();
     let mut current_line: Vec<CellFragment> = Vec::new();
     let mut current_width = 0usize;
+    let mut glue = false;
 
     for frag in frags {
         match frag {
-            CellFragment::Text(t) => {
+            CellFragment::Text(t, style) => {
                 let expanded = expand_tabs(t, 0);
+                let style = *style;
                 for word in expanded.split_whitespace() {
                     let word_width = display_width(word);
 
@@ -382,36 +428,57 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                             lines.push(std::mem::take(&mut current_line));
                             current_width = 0;
                         }
+                        glue = false;
                         let mut chunk = String::new();
                         let mut chunk_width = 0usize;
                         for ch in word.chars() {
                             let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
                             if chunk_width + ch_width > width && !chunk.is_empty() {
-                                lines.push(vec![CellFragment::Text(std::mem::take(&mut chunk))]);
+                                lines.push(vec![CellFragment::Text(
+                                    std::mem::take(&mut chunk),
+                                    style,
+                                )]);
                                 chunk_width = 0;
                             }
                             chunk.push(ch);
                             chunk_width += ch_width;
                         }
                         if !chunk.is_empty() {
-                            current_line.push(CellFragment::Text(chunk));
+                            current_line.push(CellFragment::Text(chunk, style));
                             current_width = chunk_width;
                         }
                         continue;
                     }
 
-                    let sep = if current_width == 0 { 0 } else { 1 };
+                    let needs_sep = current_width > 0 && !glue;
+                    glue = false;
+                    let sep = if needs_sep { 1 } else { 0 };
                     if current_width + sep + word_width > width && current_width > 0 {
                         lines.push(std::mem::take(&mut current_line));
                         current_width = 0;
-                    }
-                    if current_width > 0 {
-                        current_line.push(CellFragment::Text(" ".to_string()));
+                    } else if needs_sep {
+                        current_line.push(CellFragment::Text(" ".to_string(), style));
                         current_width += 1;
                     }
-                    current_line.push(CellFragment::Text(word.to_string()));
+                    current_line.push(CellFragment::Text(word.to_string(), style));
                     current_width += word_width;
                 }
+            }
+            CellFragment::LinkMarker => {
+                if current_width + 1 > width && current_width > 0 {
+                    lines.push(std::mem::take(&mut current_line));
+                    current_width = 0;
+                }
+                if current_width > 0 {
+                    current_line.push(CellFragment::Text(
+                        " ".to_string(),
+                        CellInlineStyle::default(),
+                    ));
+                    current_width += 1;
+                }
+                current_line.push(frag.clone());
+                current_width += 1;
+                glue = true;
             }
             CellFragment::Code(_) | CellFragment::InlineMath(_) => {
                 let frag_width = frag.display_width();
@@ -421,7 +488,10 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                     current_width = 0;
                 }
                 if current_width > 0 {
-                    current_line.push(CellFragment::Text(" ".to_string()));
+                    current_line.push(CellFragment::Text(
+                        " ".to_string(),
+                        CellInlineStyle::default(),
+                    ));
                     current_width += 1;
                 }
                 current_line.push(frag.clone());
@@ -444,6 +514,7 @@ fn align_cell(
     width: usize,
     align: Alignment,
     base_style: Style,
+    is_header: bool,
     theme: &crate::theme::MarkdownTheme,
 ) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
@@ -451,10 +522,30 @@ fn align_cell(
 
     for frag in frags {
         match frag {
-            CellFragment::Text(t) => {
+            CellFragment::Text(t, inline) => {
                 let expanded = expand_tabs(t, 0);
                 content_width += display_width(&expanded);
-                spans.push(Span::styled(expanded, base_style));
+                let mut style = base_style;
+                if inline.bold {
+                    style = style.add_modifier(Modifier::BOLD);
+                    if !is_header {
+                        style = style.fg(theme.strong_text);
+                    }
+                }
+                if inline.italic {
+                    style = style.add_modifier(Modifier::ITALIC);
+                }
+                if inline.strikethrough {
+                    style = style.add_modifier(Modifier::CROSSED_OUT);
+                }
+                if inline.link {
+                    style = style.fg(theme.link_text).add_modifier(Modifier::UNDERLINED);
+                }
+                spans.push(Span::styled(expanded, style));
+            }
+            CellFragment::LinkMarker => {
+                spans.push(Span::styled("⌗", Style::default().fg(theme.link_icon)));
+                content_width += 1;
             }
             CellFragment::Code(_) | CellFragment::InlineMath(_) => {
                 let styled = format!(" {} ", frag.rendered_text());

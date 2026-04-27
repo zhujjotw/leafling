@@ -590,7 +590,9 @@ fn inline_text_style(
             .fg(theme.blockquote_text)
             .add_modifier(Modifier::ITALIC)
     } else if inline.in_link {
-        Style::default().fg(theme.link_text)
+        Style::default()
+            .fg(theme.link_text)
+            .add_modifier(Modifier::UNDERLINED)
     } else {
         Style::default().fg(theme.text)
     };
