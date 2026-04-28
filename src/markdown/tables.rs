@@ -55,6 +55,8 @@ pub(super) struct TableBuf {
     current_cell: Vec<CellFragment>,
     pub(super) in_header: bool,
     inline_style: CellInlineStyle,
+    key_column: Option<usize>,
+    fill_width: bool,
 }
 
 struct TableBorder<'a> {
@@ -162,6 +164,56 @@ impl TableBuf {
             current_cell: vec![],
             in_header: false,
             inline_style: CellInlineStyle::default(),
+            key_column: None,
+            fill_width: false,
+        }
+    }
+
+    pub(crate) fn from_key_value_pairs(pairs: &[(String, String)], vertical: bool) -> Self {
+        let style = CellInlineStyle::default();
+        if vertical {
+            let alignments = vec![Alignment::None; 2];
+            let rows = pairs
+                .iter()
+                .map(|(k, v)| {
+                    vec![
+                        vec![CellFragment::Text(k.clone(), style)],
+                        vec![CellFragment::Text(v.clone(), style)],
+                    ]
+                })
+                .collect();
+            Self {
+                alignments,
+                rows,
+                header_count: 0,
+                current_row: vec![],
+                current_cell: vec![],
+                in_header: false,
+                inline_style: style,
+                key_column: Some(0),
+                fill_width: true,
+            }
+        } else {
+            let alignments = vec![Alignment::None; pairs.len()];
+            let header_row: Vec<Vec<CellFragment>> = pairs
+                .iter()
+                .map(|(k, _)| vec![CellFragment::Text(k.clone(), style)])
+                .collect();
+            let data_row: Vec<Vec<CellFragment>> = pairs
+                .iter()
+                .map(|(_, v)| vec![CellFragment::Text(v.clone(), style)])
+                .collect();
+            Self {
+                alignments,
+                rows: vec![header_row, data_row],
+                header_count: 1,
+                current_row: vec![],
+                current_cell: vec![],
+                in_header: false,
+                inline_style: style,
+                key_column: None,
+                fill_width: true,
+            }
         }
     }
     fn push_text(&mut self, t: &str) {
@@ -201,7 +253,7 @@ impl TableBuf {
         self.in_header = false;
     }
 
-    fn render(&self, render_width: usize) -> Vec<Line<'static>> {
+    pub(crate) fn render(&self, render_width: usize) -> Vec<Line<'static>> {
         let theme = &app_theme().markdown;
         if self.rows.is_empty() {
             return vec![];
@@ -223,6 +275,20 @@ impl TableBuf {
         }
 
         fit_table_widths(&mut col_widths, &min_widths, render_width);
+
+        if self.fill_width {
+            let border_width = 3 * col_count + 1;
+            let available = render_width.saturating_sub(border_width);
+            let current: usize = col_widths.iter().sum();
+            if current < available {
+                let extra = available - current;
+                let base = extra / col_count;
+                let remainder = extra % col_count;
+                for (i, w) in col_widths.iter_mut().enumerate() {
+                    *w += base + if i < remainder { 1 } else { 0 };
+                }
+            }
+        }
 
         let border = Style::default().fg(theme.table_border);
         let sep = Style::default().fg(theme.table_separator);
@@ -266,8 +332,10 @@ impl TableBuf {
                 for (ci, width) in col_widths.iter().copied().enumerate().take(col_count) {
                     let frags = wrapped_cells[ci].get(line_idx).unwrap_or(&empty_cell);
                     let align = self.alignments.get(ci).copied().unwrap_or(Alignment::None);
-                    let base_style = if is_hdr { header } else { cell };
-                    let cell_spans = align_cell(frags, width, align, base_style, is_hdr, theme);
+                    let is_key_col = self.key_column == Some(ci);
+                    let base_style = if is_hdr || is_key_col { header } else { cell };
+                    let cell_spans =
+                        align_cell(frags, width, align, base_style, is_hdr || is_key_col, theme);
                     spans.push(Span::raw(" "));
                     spans.extend(cell_spans);
                     spans.push(Span::raw(" "));

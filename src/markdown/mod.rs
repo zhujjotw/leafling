@@ -1,3 +1,4 @@
+mod frontmatter;
 mod latex;
 mod mermaid;
 mod tables;
@@ -97,22 +98,6 @@ pub(crate) fn highlight_line<'a>(line: &Line<'a>) -> Line<'a> {
 }
 
 const DEFAULT_RENDER_WIDTH: usize = 80;
-
-fn strip_frontmatter(src: &str) -> &str {
-    let Some(rest) = src.strip_prefix("---\n") else {
-        return src;
-    };
-
-    let mut offset = 4usize;
-    for line in rest.split_inclusive('\n') {
-        if line == "---\n" || line == "...\n" || line == "---" || line == "..." {
-            return &src[offset + line.len()..];
-        }
-        offset += line.len();
-    }
-
-    src
-}
 
 fn syntect_to_color(c: syntect::highlighting::Color) -> Color {
     Color::Rgb(c.r, c.g, c.b)
@@ -1015,8 +1000,14 @@ pub(crate) fn parse_markdown_with_width(
     render_width: usize,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>) {
     let theme_colors = &app_theme().markdown;
-    let src = strip_frontmatter(src);
+    let (src, fm_pairs) = frontmatter::extract_frontmatter(src);
     let mut lines: Vec<Line<'static>> = Vec::new();
+
+    if let Some(ref pairs) = fm_pairs {
+        let vertical = frontmatter::is_vertical(pairs);
+        let tb = TableBuf::from_key_value_pairs(pairs, vertical);
+        lines.extend(tb.render(render_width));
+    }
     let mut toc: Vec<TocEntry> = Vec::new();
 
     let mut spans: Vec<Span<'static>> = Vec::new();
