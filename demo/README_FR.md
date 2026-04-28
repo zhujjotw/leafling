@@ -1,6 +1,6 @@
 # leaf - Démo des fonctionnalités
 
-**leaf** est un prévisualiseur Markdown en terminal avec coloration syntaxique, rendu LaTeX, support de thèmes et navigation interactive.
+**leaf** est un prévisualiseur Markdown en terminal avec coloration syntaxique, rendu LaTeX, diagrammes Mermaid, support de thèmes et navigation interactive.
 
 ## Fonctionnalités interactives
 
@@ -80,6 +80,14 @@ Supporté : fractions, exposants, indices, lettres grecques, racines, et plus en
 Source: [demo-latex-render.md](sources/demo-latex-render.md)
 
 ![Rendu LaTeX](images/demo-latex-render.png)
+
+### Diagrammes Mermaid
+
+**leaf** rend les diagrammes Mermaid en ASCII art visuel directement dans le terminal. Les flowcharts, diagrammes de séquence et pie charts sont convertis depuis leurs définitions textuelles en représentations avec caractères de dessin. Les types de diagrammes non supportés affichent le source avec coloration syntaxique.
+
+Source: [demo-mermaid-render.md](sources/demo-mermaid-render.md)
+
+![Diagrammes Mermaid](images/demo-mermaid-render.png)
 
 ### Blocs de code avec coloration syntaxique
 

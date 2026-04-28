@@ -289,6 +289,55 @@ Operators: ≤ ≥ ≠ ≈ ± × ÷ → ⇒ ⇔ ∪ ∩ ⊂ ∅ ∞.
 
 This costs $5.00 and that costs $10 each.
 
+### Mermaid Diagrams
+
+#### Flowchart
+
+```mermaid
+graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[OK]
+    B -->|No| D[Cancel]
+    C --> E[End]
+    D --> E
+```
+
+#### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as Server
+    U->>S: POST /login
+    S-->>U: 200 OK
+```
+
+#### Pie Chart
+
+```mermaid
+pie title Languages
+    "Rust" : 65
+    "TypeScript" : 20
+    "Shell" : 15
+```
+
+#### Mermaid in Blockquote
+
+> ```mermaid
+> graph LR
+>     A --> B
+> ```
+
+#### Mermaid in List
+
+- First item
+- Diagram:
+  ```mermaid
+  graph LR
+      X --> Y
+  ```
+- Last item
+
 ### Wide Characters
 
 These lines are here to verify width calculations:

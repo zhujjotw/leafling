@@ -1,6 +1,6 @@
 # leaf - Features Demo
 
-**leaf** is a terminal-based Markdown previewer with syntax highlighting, LaTeX rendering, theme support, and interactive navigation.
+**leaf** is a terminal-based Markdown previewer with syntax highlighting, LaTeX rendering, Mermaid diagrams, theme support, and interactive navigation.
 
 ## Interactive Features
 
@@ -80,6 +80,14 @@ Supported: fractions, superscripts, subscripts, Greek letters, roots, and more. 
 Source: [demo-latex-render.md](sources/demo-latex-render.md)
 
 ![LaTeX Rendering](images/demo-latex-render.png)
+
+### Mermaid Diagrams
+
+**leaf** renders Mermaid diagrams as visual ASCII art directly in the terminal. Flowcharts, sequence diagrams, and pie charts are converted from their text definitions into box-drawing representations. Unsupported diagram types fall back to syntax-colored source display.
+
+Source: [demo-mermaid-render.md](sources/demo-mermaid-render.md)
+
+![Mermaid Diagrams](images/demo-mermaid-render.png)
 
 ### Code Blocks with Syntax Highlighting
 
