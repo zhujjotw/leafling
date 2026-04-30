@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.18.0](https://github.com/RivoLink/leaf/releases/tag/1.18.0)] - 2026-04-30
+
+### Docs
+
+- config file support ([#65](https://github.com/RivoLink/leaf/pull/65))
+
+### Added
+
+- config file support ([#64](https://github.com/RivoLink/leaf/pull/64))
+
 ## [[1.17.0](https://github.com/RivoLink/leaf/releases/tag/1.17.0)] - 2026-04-28
 
 ### Docs
