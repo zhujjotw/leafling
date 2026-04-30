@@ -5,6 +5,7 @@ use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 mod app;
 mod cli;
+mod config;
 mod editor;
 mod markdown;
 mod render;
@@ -20,11 +21,13 @@ use cli::{parse_cli, print_usage, print_version, CliOptions};
 use markdown::{hash_str, parse_markdown, read_file_state};
 use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
-use theme::{current_syntect_theme, set_theme_preset};
+use theme::{current_syntect_theme, parse_theme_preset, set_theme_preset};
 use update::run_update;
 
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
+#[cfg(test)]
+pub(crate) use config::{config_path, LeafConfig};
 #[cfg(test)]
 pub(crate) use editor::{binary_name, classify, resolve_editor, split_editor_cmd, EditorKind};
 #[cfg(test)]
@@ -40,7 +43,7 @@ pub(crate) use render::wrap_path_lines;
 #[cfg(test)]
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
-pub(crate) use theme::{parse_theme_preset, theme_preset_label, ThemePreset, THEME_PRESETS};
+pub(crate) use theme::{theme_preset_label, ThemePreset, THEME_PRESETS};
 #[cfg(test)]
 pub(crate) use update::{
     asset_name_for_target, expected_asset_download_url, find_expected_checksum, is_newer_version,
@@ -82,16 +85,30 @@ fn main() -> Result<()> {
         run_update()?;
         return Ok(());
     }
+    if options.config {
+        config::run_config()?;
+        return Ok(());
+    }
     let CliOptions {
         picker,
-        watch,
+        watch: watch_from_cli,
         debug_input,
         file_arg,
-        theme,
+        theme: cli_theme,
         editor: cli_editor,
         ..
     } = options;
-    let resolved_editor = editor::resolve_editor(cli_editor.as_deref());
+
+    let (user_config, config_warning) = config::load_config();
+
+    let theme = cli_theme
+        .or_else(|| user_config.theme.as_deref().and_then(parse_theme_preset))
+        .unwrap_or_default();
+
+    let watch_from_config = user_config.watch.unwrap_or(false);
+
+    let resolved_editor =
+        editor::resolve_editor(cli_editor.as_deref(), user_config.editor.as_deref());
     runtime::debug_log(debug_input, &format!("main start args={args:?}"));
     set_theme_preset(theme);
 
@@ -130,7 +147,7 @@ fn main() -> Result<()> {
             }
             (String::new(), label, None)
         } else {
-            if watch {
+            if watch_from_cli {
                 eprintln!("Error: --watch requires a file path (stdin cannot be watched)");
                 std::process::exit(1);
             }
@@ -139,6 +156,9 @@ fn main() -> Result<()> {
             (buf, "stdin".to_string(), None)
         }
     };
+
+    let is_file_input = filepath.is_some();
+    let watch = watch_from_cli || (watch_from_config && is_file_input);
 
     let ss = SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
@@ -174,6 +194,7 @@ fn main() -> Result<()> {
     );
     app.set_last_content_hash(last_content_hash);
     app.set_editor_config(Some(resolved_editor));
+    app.set_config_warning(config_warning);
     if let Some(dir) = open_browser_picker_dir {
         app.queue_file_picker(dir);
     }

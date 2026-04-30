@@ -90,12 +90,18 @@ fn split_editor_cmd_path_with_args() {
 
 #[test]
 fn resolve_editor_cli_takes_priority() {
-    let result = resolve_editor(Some("vim"));
+    let result = resolve_editor(Some("vim"), None);
     assert_eq!(result, "vim");
 }
 
 #[test]
 fn resolve_editor_fallback_is_not_empty() {
-    let result = resolve_editor(None);
+    let result = resolve_editor(None, None);
     assert!(!result.is_empty());
+}
+
+#[test]
+fn resolve_editor_config_takes_priority_over_fallback() {
+    let result = resolve_editor(None, Some("helix"));
+    assert_eq!(result, "helix");
 }

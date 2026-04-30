@@ -1,0 +1,27 @@
+# leaf configuration file
+#
+# Copy this file to your config directory:
+#   Linux / macOS / Termux:  ~/.config/leaf/config.toml
+#   Windows:                 %APPDATA%\leaf\config.toml
+#
+# On Linux / macOS, $XDG_CONFIG_HOME/leaf/config.toml is used if set.
+#
+# All settings are optional. If a setting is missing or the file
+# does not exist, leaf uses its built-in defaults.
+# Command-line arguments always take priority over this file.
+
+# Color theme
+# Available: arctic, forest, ocean, solarized-dark
+# Default: ocean
+theme = "ocean"
+
+# Default editor for Ctrl+E
+# Any editor name available in PATH: nano, vim, nvim, micro,
+# helix, emacs, code, subl, gedit, kate, mousepad, zed, etc.
+# Falls back to: LEAF_EDITOR > VISUAL > EDITOR > nano (notepad on Windows)
+# editor = "nano"
+
+# Watch mode: automatically reload when the file changes
+# Only applies when opening a file (ignored for stdin and picker)
+# Default: false
+watch = false

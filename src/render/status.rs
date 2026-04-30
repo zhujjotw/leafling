@@ -173,6 +173,19 @@ pub(crate) fn status_percent_section(pct: u16, bar_bg: Color) -> Vec<Span<'stati
     )]
 }
 
+fn config_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
+    let (message, started) = app.config_flash()?;
+    if started.elapsed() >= std::time::Duration::from_millis(FLASH_DURATION_MS) {
+        return None;
+    }
+    let theme = app_theme();
+    let bar_bg = status_bar_bg();
+    Some(vec![Span::styled(
+        format!(" {message} "),
+        Style::default().fg(theme.ui.status_warning_fg).bg(bar_bg),
+    )])
+}
+
 fn editor_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
     let (flash, started) = app.editor_flash()?;
     if started.elapsed() >= std::time::Duration::from_millis(FLASH_DURATION_MS) {
@@ -205,6 +218,12 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
     }
 
     if let Some(flash_section) = watch_flash_section(app) {
+        let mut left = status_brand_section();
+        left.extend(flash_section);
+        return join_span_sections(vec![left], outer_separator);
+    }
+
+    if let Some(flash_section) = config_flash_section(app) {
         let mut left = status_brand_section();
         left.extend(flash_section);
         return join_span_sections(vec![left], outer_separator);

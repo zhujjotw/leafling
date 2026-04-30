@@ -20,5 +20,6 @@ reqwest       = { version = "0.12", default-features = false, features = ["block
 serde         = { version = "1.0", features = ["derive"] }
 semver        = "1.0"
 sha2          = "0.10"
+toml          = "0.8"
 unicodeit     = "0.2"
 mmdflux       = "2.1"

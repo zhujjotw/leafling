@@ -154,7 +154,7 @@ pub(crate) fn detect_terminal_emulator() -> TerminalEmulator {
     TerminalEmulator::Unknown
 }
 
-pub(crate) fn resolve_editor(cli_editor: Option<&str>) -> String {
+pub(crate) fn resolve_editor(cli_editor: Option<&str>, config_editor: Option<&str>) -> String {
     let raw = if let Some(e) = cli_editor {
         e.to_string()
     } else if let Some(e) = std::env::var("LEAF_EDITOR").ok().filter(|s| !s.is_empty()) {
@@ -163,6 +163,8 @@ pub(crate) fn resolve_editor(cli_editor: Option<&str>) -> String {
         e
     } else if let Some(e) = std::env::var("EDITOR").ok().filter(|s| !s.is_empty()) {
         e
+    } else if let Some(e) = config_editor {
+        e.to_string()
     } else {
         platform_fallback_editor().to_string()
     };

@@ -99,6 +99,9 @@ pub(crate) fn run(
         let watch_flash_timeout = app
             .watch_flash()
             .and_then(|(_, started)| WATCH_FLASH_DURATION.checked_sub(started.elapsed()));
+        let config_flash_timeout = app
+            .config_flash()
+            .and_then(|(_, started)| CONFIG_FLASH_DURATION.checked_sub(started.elapsed()));
         let resize_timeout =
             pending_resize.and_then(|started| RESIZE_DEBOUNCE.checked_sub(started.elapsed()));
         let poll_timeout = [
@@ -115,6 +118,7 @@ pub(crate) fn run(
             flash_timeout,
             editor_flash_timeout,
             watch_flash_timeout,
+            config_flash_timeout,
             resize_timeout,
         ]
         .into_iter()
@@ -528,12 +532,20 @@ pub(crate) fn run(
                 needs_redraw = true;
             }
         }
+
+        if let Some((_, started)) = app.config_flash() {
+            if started.elapsed() >= CONFIG_FLASH_DURATION {
+                app.clear_config_flash();
+                needs_redraw = true;
+            }
+        }
     }
     Ok(())
 }
 
 const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 const WATCH_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
+const CONFIG_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 
 fn strip_unc_prefix(path: std::path::PathBuf) -> std::path::PathBuf {
     if cfg!(target_os = "windows") {

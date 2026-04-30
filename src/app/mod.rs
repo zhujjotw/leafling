@@ -81,6 +81,7 @@ pub(crate) struct StatusCacheKey {
     picker_loading: bool,
     watch_flash_active: bool,
     watch_error: bool,
+    config_flash_active: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -129,6 +130,7 @@ pub(crate) struct App {
     pub(super) editor_config: Option<String>,
     pub(super) editor_flash: Option<(EditorFlash, Instant)>,
     watch_flash: Option<(WatchFlash, Instant)>,
+    config_flash: Option<(String, Instant)>,
 }
 
 impl App {
@@ -247,6 +249,7 @@ impl App {
             editor_config: None,
             editor_flash: None,
             watch_flash: None,
+            config_flash: None,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -431,6 +434,11 @@ impl App {
                 .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
                 .unwrap_or(false),
             watch_error: self.watch_error,
+            config_flash_active: self
+                .config_flash
+                .as_ref()
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
+                .unwrap_or(false),
         };
 
         if self.status_cache_key.as_ref() == Some(&cache_key) {
@@ -558,6 +566,20 @@ impl App {
 
     pub(crate) fn clear_watch_flash(&mut self) {
         self.watch_flash = None;
+    }
+
+    pub(crate) fn set_config_warning(&mut self, warning: Option<String>) {
+        if let Some(msg) = warning {
+            self.config_flash = Some((msg, Instant::now()));
+        }
+    }
+
+    pub(crate) fn config_flash(&self) -> Option<(&str, &Instant)> {
+        self.config_flash.as_ref().map(|(msg, t)| (msg.as_str(), t))
+    }
+
+    pub(crate) fn clear_config_flash(&mut self) {
+        self.config_flash = None;
     }
 
     pub(crate) fn filepath(&self) -> Option<&std::path::Path> {

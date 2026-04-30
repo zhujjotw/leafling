@@ -7,11 +7,12 @@ pub(crate) struct CliOptions {
     pub(crate) picker: bool,
     pub(crate) watch: bool,
     pub(crate) update: bool,
+    pub(crate) config: bool,
     pub(crate) debug_input: bool,
     pub(crate) print_help: bool,
     pub(crate) print_version: bool,
     pub(crate) file_arg: Option<String>,
-    pub(crate) theme: ThemePreset,
+    pub(crate) theme: Option<ThemePreset>,
     pub(crate) editor: Option<String>,
 }
 
@@ -28,6 +29,7 @@ pub(crate) fn usage_text() -> &'static str {
      \x20     --theme <PRESET>       Set color theme (arctic|forest|ocean|solarized-dark)\n\
      \x20 -e, --editor <NAME>        Set external editor (nano|vim|code|subl|emacs)\n\
      \x20     --picker               Open the file browser picker\n\
+     \x20     --config               Open configuration file in editor\n\
      \x20     --update               Update leaf to the latest version"
 }
 
@@ -62,6 +64,7 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
             "--picker" => options.picker = true,
             "--watch" | "-w" => options.watch = true,
             "--update" => options.update = true,
+            "--config" => options.config = true,
             "--debug-input" => options.debug_input = true,
             "--help" | "-h" => options.print_help = true,
             "--version" | "-V" => options.print_version = true,
@@ -69,13 +72,17 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
                 let Some(name) = iter.next() else {
                     anyhow::bail!("Missing value for --theme");
                 };
-                options.theme = parse_theme_preset(name)
-                    .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?;
+                options.theme = Some(
+                    parse_theme_preset(name)
+                        .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?,
+                );
             }
             _ if arg.starts_with("--theme=") => {
                 let name = &arg["--theme=".len()..];
-                options.theme = parse_theme_preset(name)
-                    .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?;
+                options.theme = Some(
+                    parse_theme_preset(name)
+                        .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?,
+                );
             }
             "--editor" | "-e" => {
                 let Some(value) = iter.next() else {
@@ -97,11 +104,25 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
         let has_non_update_flags = options.watch
             || options.picker
             || options.debug_input
+            || options.config
             || options.file_arg.is_some()
-            || options.theme != ThemePreset::default()
+            || options.theme.is_some()
             || options.editor.is_some();
         if has_non_update_flags {
             anyhow::bail!("--update must be used on its own");
+        }
+    }
+
+    if options.config {
+        let has_non_config_flags = options.watch
+            || options.picker
+            || options.debug_input
+            || options.update
+            || options.file_arg.is_some()
+            || options.theme.is_some()
+            || options.editor.is_some();
+        if has_non_config_flags {
+            anyhow::bail!("--config must be used on its own");
         }
     }
 

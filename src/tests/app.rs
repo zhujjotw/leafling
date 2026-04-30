@@ -62,6 +62,41 @@ fn parse_cli_rejects_update_with_other_flags() {
 }
 
 #[test]
+fn parse_cli_accepts_config_on_its_own() {
+    let args = vec!["leaf".to_string(), "--config".to_string()];
+    let options = parse_cli(&args).unwrap();
+
+    assert!(options.config);
+    assert!(!options.update);
+    assert!(!options.watch);
+    assert_eq!(options.file_arg, None);
+}
+
+#[test]
+fn parse_cli_rejects_config_with_other_flags() {
+    let args = vec![
+        "leaf".to_string(),
+        "--config".to_string(),
+        "--watch".to_string(),
+    ];
+
+    let err = parse_cli(&args).unwrap_err();
+    assert!(err.to_string().contains("--config must be used on its own"));
+}
+
+#[test]
+fn parse_cli_rejects_update_with_config() {
+    let args = vec![
+        "leaf".to_string(),
+        "--update".to_string(),
+        "--config".to_string(),
+    ];
+
+    let err = parse_cli(&args).unwrap_err();
+    assert!(err.to_string().contains("must be used on its own"));
+}
+
+#[test]
 fn parse_cli_accepts_picker_on_its_own() {
     let args = vec!["leaf".to_string(), "--picker".to_string()];
     let options = parse_cli(&args).unwrap();
