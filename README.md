@@ -120,6 +120,24 @@ cat TESTING.md | leaf
 
 ```
 
+## Configuration
+
+Set default values for theme, editor, and watch mode via `config.toml`:
+
+```bash
+leaf --config
+```
+
+This opens the configuration file in your editor. If the file does not exist yet, leaf creates it with documented defaults.
+
+```toml
+theme = "ocean"      # arctic, forest, ocean, solarized-dark
+editor = "nano"      # any editor in PATH
+watch = false        # auto-reload when opening a file
+```
+
+All settings are optional. CLI arguments always take priority. See [`config.toml`](config.toml) for details.
+
 ## Keybindings
 
 | Key | Action |
