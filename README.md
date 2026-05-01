@@ -33,6 +33,14 @@ npm:
 npm install -g @rivolink/leaf
 ```
 
+ArchLinux (AUR):
+
+Use an [AUR helper](https://wiki.archlinux.org/title/AUR_helpers), such as `yay`:
+
+```bash
+yay -S leaf-markdown-viewer
+```
+
 Verify the installation:
 
 ```bash
