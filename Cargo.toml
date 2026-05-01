@@ -23,3 +23,6 @@ sha2          = "0.10"
 toml          = "0.8"
 unicodeit     = "0.2"
 mmdflux       = "2.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+crossterm     = { version = "0.28", features = ["use-dev-tty"] }
