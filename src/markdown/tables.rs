@@ -19,17 +19,17 @@ struct CellInlineStyle {
 
 #[derive(Clone)]
 enum CellFragment {
-    Text(String, CellInlineStyle),
-    Code(String),
-    InlineMath(String),
+    Text(String, CellInlineStyle, bool),
+    Code(String, bool),
+    InlineMath(String, bool),
     LinkMarker,
 }
 
 impl CellFragment {
     fn rendered_text(&self) -> String {
         match self {
-            CellFragment::Text(t, _) | CellFragment::Code(t) => t.clone(),
-            CellFragment::InlineMath(t) => latex::to_unicode(t),
+            CellFragment::Text(t, _, _) | CellFragment::Code(t, _) => t.clone(),
+            CellFragment::InlineMath(t, _) => latex::to_unicode(t),
             CellFragment::LinkMarker => "⌗".to_string(),
         }
     }
@@ -37,13 +37,13 @@ impl CellFragment {
     fn display_width(&self) -> usize {
         let w = display_width(&self.rendered_text());
         match self {
-            CellFragment::Text(_, _) | CellFragment::LinkMarker => w,
+            CellFragment::Text(_, _, _) | CellFragment::LinkMarker => w,
             _ => w + 2,
         }
     }
 
     fn is_text(&self) -> bool {
-        matches!(self, CellFragment::Text(_, _))
+        matches!(self, CellFragment::Text(_, _, _))
     }
 }
 
@@ -177,8 +177,8 @@ impl TableBuf {
                 .iter()
                 .map(|(k, v)| {
                     vec![
-                        vec![CellFragment::Text(k.clone(), style)],
-                        vec![CellFragment::Text(v.clone(), style)],
+                        vec![CellFragment::Text(k.clone(), style, false)],
+                        vec![CellFragment::Text(v.clone(), style, false)],
                     ]
                 })
                 .collect();
@@ -197,11 +197,11 @@ impl TableBuf {
             let alignments = vec![Alignment::None; pairs.len()];
             let header_row: Vec<Vec<CellFragment>> = pairs
                 .iter()
-                .map(|(k, _)| vec![CellFragment::Text(k.clone(), style)])
+                .map(|(k, _)| vec![CellFragment::Text(k.clone(), style, false)])
                 .collect();
             let data_row: Vec<Vec<CellFragment>> = pairs
                 .iter()
-                .map(|(_, v)| vec![CellFragment::Text(v.clone(), style)])
+                .map(|(_, v)| vec![CellFragment::Text(v.clone(), style, false)])
                 .collect();
             Self {
                 alignments,
@@ -216,26 +216,41 @@ impl TableBuf {
             }
         }
     }
+    fn prev_ends_without_ws(&self) -> bool {
+        match self.current_cell.last() {
+            Some(CellFragment::Text(s, _, _)) => !s.is_empty() && !s.ends_with(char::is_whitespace),
+            Some(_) => true,
+            None => false,
+        }
+    }
     fn push_text(&mut self, t: &str) {
-        self.current_cell
-            .push(CellFragment::Text(t.to_string(), self.inline_style));
+        let starts_no_ws = !t.is_empty() && !t.starts_with(char::is_whitespace);
+        let adjacent = starts_no_ws && self.prev_ends_without_ws();
+        self.current_cell.push(CellFragment::Text(
+            t.to_string(),
+            self.inline_style,
+            adjacent,
+        ));
     }
     fn push_link_marker(&mut self) {
         self.current_cell.push(CellFragment::LinkMarker);
     }
     fn push_code(&mut self, t: &str) {
-        self.current_cell.push(CellFragment::Code(t.to_string()));
+        let adjacent = self.prev_ends_without_ws();
+        self.current_cell
+            .push(CellFragment::Code(t.to_string(), adjacent));
     }
     fn push_inline_math(&mut self, t: &str) {
+        let adjacent = self.prev_ends_without_ws();
         self.current_cell
-            .push(CellFragment::InlineMath(t.to_string()));
+            .push(CellFragment::InlineMath(t.to_string(), adjacent));
     }
     fn end_cell(&mut self) {
         let mut frags = std::mem::take(&mut self.current_cell);
-        if let Some(CellFragment::Text(t, _)) = frags.first_mut() {
+        if let Some(CellFragment::Text(t, _, _)) = frags.first_mut() {
             *t = t.trim_start().to_string();
         }
-        if let Some(CellFragment::Text(t, _)) = frags.last_mut() {
+        if let Some(CellFragment::Text(t, _, _)) = frags.last_mut() {
             *t = t.trim_end().to_string();
         }
         self.current_row.push(frags);
@@ -482,12 +497,15 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
     let mut current_line: Vec<CellFragment> = Vec::new();
     let mut current_width = 0usize;
     let mut glue = false;
+    let space_frag = || CellFragment::Text(" ".to_string(), CellInlineStyle::default(), false);
 
     for frag in frags {
         match frag {
-            CellFragment::Text(t, style) => {
+            CellFragment::Text(t, style, adj) => {
                 let expanded = expand_tabs(t, 0);
                 let style = *style;
+                let adj = *adj;
+                let mut first_word = true;
                 for word in expanded.split_whitespace() {
                     let word_width = display_width(word);
 
@@ -497,6 +515,7 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                             current_width = 0;
                         }
                         glue = false;
+                        first_word = false;
                         let mut chunk = String::new();
                         let mut chunk_width = 0usize;
                         for ch in word.chars() {
@@ -505,6 +524,7 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                                 lines.push(vec![CellFragment::Text(
                                     std::mem::take(&mut chunk),
                                     style,
+                                    false,
                                 )]);
                                 chunk_width = 0;
                             }
@@ -512,23 +532,25 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                             chunk_width += ch_width;
                         }
                         if !chunk.is_empty() {
-                            current_line.push(CellFragment::Text(chunk, style));
+                            current_line.push(CellFragment::Text(chunk, style, false));
                             current_width = chunk_width;
                         }
                         continue;
                     }
 
-                    let needs_sep = current_width > 0 && !glue;
+                    let suppress = adj && first_word;
+                    first_word = false;
+                    let needs_sep = current_width > 0 && !glue && !suppress;
                     glue = false;
                     let sep = if needs_sep { 1 } else { 0 };
                     if current_width + sep + word_width > width && current_width > 0 {
                         lines.push(std::mem::take(&mut current_line));
                         current_width = 0;
                     } else if needs_sep {
-                        current_line.push(CellFragment::Text(" ".to_string(), style));
+                        current_line.push(CellFragment::Text(" ".to_string(), style, false));
                         current_width += 1;
                     }
-                    current_line.push(CellFragment::Text(word.to_string(), style));
+                    current_line.push(CellFragment::Text(word.to_string(), style, false));
                     current_width += word_width;
                 }
             }
@@ -538,28 +560,23 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                     current_width = 0;
                 }
                 if current_width > 0 {
-                    current_line.push(CellFragment::Text(
-                        " ".to_string(),
-                        CellInlineStyle::default(),
-                    ));
+                    current_line.push(space_frag());
                     current_width += 1;
                 }
                 current_line.push(frag.clone());
                 current_width += 1;
                 glue = true;
             }
-            CellFragment::Code(_) | CellFragment::InlineMath(_) => {
+            CellFragment::Code(_, adj) | CellFragment::InlineMath(_, adj) => {
                 let frag_width = frag.display_width();
-                let sep = if current_width == 0 { 0 } else { 1 };
+                let adj = *adj;
+                let sep = if current_width == 0 || adj { 0 } else { 1 };
                 if current_width + sep + frag_width > width && current_width > 0 {
                     lines.push(std::mem::take(&mut current_line));
                     current_width = 0;
                 }
-                if current_width > 0 {
-                    current_line.push(CellFragment::Text(
-                        " ".to_string(),
-                        CellInlineStyle::default(),
-                    ));
+                if current_width > 0 && !adj {
+                    current_line.push(space_frag());
                     current_width += 1;
                 }
                 current_line.push(frag.clone());
@@ -590,7 +607,7 @@ fn align_cell(
 
     for frag in frags {
         match frag {
-            CellFragment::Text(t, inline) => {
+            CellFragment::Text(t, inline, _) => {
                 let expanded = expand_tabs(t, 0);
                 content_width += display_width(&expanded);
                 let mut style = base_style;
@@ -615,11 +632,11 @@ fn align_cell(
                 spans.push(Span::styled("⌗", Style::default().fg(theme.link_icon)));
                 content_width += 1;
             }
-            CellFragment::Code(_) | CellFragment::InlineMath(_) => {
+            CellFragment::Code(_, _) | CellFragment::InlineMath(_, _) => {
                 let styled = format!(" {} ", frag.rendered_text());
                 content_width += display_width(&styled);
                 let (fg, bg) = match frag {
-                    CellFragment::Code(_) => (theme.inline_code_fg, theme.inline_code_bg),
+                    CellFragment::Code(..) => (theme.inline_code_fg, theme.inline_code_bg),
                     _ => (theme.latex_inline_fg, theme.latex_inline_bg),
                 };
                 spans.push(Span::styled(styled, Style::default().fg(fg).bg(bg)));
