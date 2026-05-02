@@ -539,6 +539,54 @@ fn table_inline_code_col_width_includes_padding() {
 }
 
 #[test]
+fn table_code_adjacent_text_no_extra_space() {
+    let (ss, theme) = test_assets();
+    let md = "| A |\n|---|\n| `code`:text |\n";
+    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+    let cell_line = rendered
+        .iter()
+        .find(|l| l.contains("code") && l.contains(":text"))
+        .expect("should find line with code and :text");
+    assert!(
+        !cell_line.contains("  :text"),
+        "no extra space before :text — got: {cell_line}"
+    );
+}
+
+#[test]
+fn table_bold_adjacent_text_no_extra_space() {
+    let (ss, theme) = test_assets();
+    let md = "| A |\n|---|\n| **bold**:text |\n";
+    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+    let cell_line = rendered
+        .iter()
+        .find(|l| l.contains("bold") && l.contains(":text"))
+        .expect("should find line with bold and :text");
+    assert!(
+        !cell_line.contains(" :text"),
+        "no space before :text — got: {cell_line}"
+    );
+}
+
+#[test]
+fn table_apostrophe_no_split() {
+    let (ss, theme) = test_assets();
+    let md = "| A |\n|---|\n| apos'trophe |\n";
+    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let rendered = rendered_non_empty_lines(&lines);
+    let cell_line = rendered
+        .iter()
+        .find(|l| l.contains("apos"))
+        .expect("should find line with apos");
+    assert!(
+        !cell_line.contains(" \u{2019} "),
+        "no spaces around smart apostrophe — got: {cell_line}"
+    );
+}
+
+#[test]
 fn mermaid_block_renders_in_framed_block() {
     let (ss, theme) = test_assets();
     let (lines, _) = parse_markdown("```mermaid\ngraph TD\n  A --> B\n```\n", &ss, &theme);
