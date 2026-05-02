@@ -104,6 +104,7 @@ pub(crate) struct App {
     pub(super) filename: String,
     pub(super) source: String,
     watch: bool,
+    watch_from_config: bool,
     watch_error: bool,
     pub(super) filepath: Option<PathBuf>,
     pub(super) last_file_state: Option<FileState>,
@@ -204,6 +205,7 @@ impl App {
             filename,
             source,
             watch,
+            watch_from_config: false,
             watch_error: false,
             filepath,
             last_file_state,
@@ -258,6 +260,10 @@ impl App {
 
     pub(crate) fn set_last_content_hash(&mut self, last_content_hash: u64) {
         self.last_content_hash = last_content_hash;
+    }
+
+    pub(crate) fn set_watch_from_config(&mut self, value: bool) {
+        self.watch_from_config = value;
     }
 
     pub(crate) fn is_watch_enabled(&self) -> bool {
@@ -776,9 +782,14 @@ impl App {
         let theme = current_syntect_theme(themes);
         let (lines, toc) = parse_markdown_with_width(&src, ss, theme, self.render_width);
 
+        let first_load = self.filepath.is_none();
         self.filename = filename;
         self.source = src;
         self.filepath = Some(path);
+        if first_load && self.watch_from_config {
+            self.watch = true;
+            self.watch_error = false;
+        }
         self.last_file_state = file_state;
         self.last_content_hash = content_hash;
         self.last_hash_check = Some(Instant::now());

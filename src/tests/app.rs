@@ -457,3 +457,45 @@ fn preview_mode_has_content() {
         "preview mode with source should have content"
     );
 }
+
+#[test]
+fn load_path_activates_watch_from_config() {
+    let (ss, _theme) = test_assets();
+    let ts = ThemeSet::load_defaults();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("leaf-watch-config-{unique}.md"));
+    fs::write(&path, "# Demo\n").unwrap();
+
+    let mut app = App::new_with_source(
+        Vec::new(),
+        Vec::new(),
+        AppConfig {
+            filename: "picker".to_string(),
+            source: String::new(),
+            debug_input: false,
+            watch: false,
+            filepath: None,
+            last_file_state: None,
+        },
+    );
+    app.set_watch_from_config(true);
+
+    assert!(!app.is_watch_enabled());
+    assert!(app.load_path(path.clone(), &ss, &ts));
+    assert!(app.is_watch_enabled());
+
+    // Toggle watch off, then load another file — watch stays off
+    app.toggle_watch();
+    assert!(!app.is_watch_enabled());
+
+    let path2 = std::env::temp_dir().join(format!("leaf-watch-config2-{unique}.md"));
+    fs::write(&path2, "# Second\n").unwrap();
+    assert!(app.load_path(path2.clone(), &ss, &ts));
+    assert!(!app.is_watch_enabled());
+
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(path2);
+}

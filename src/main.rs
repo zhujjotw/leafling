@@ -193,6 +193,7 @@ fn main() -> Result<()> {
         },
     );
     app.set_last_content_hash(last_content_hash);
+    app.set_watch_from_config(watch_from_config);
     app.set_editor_config(Some(resolved_editor));
     app.set_config_warning(config_warning);
     if let Some(dir) = open_browser_picker_dir {
