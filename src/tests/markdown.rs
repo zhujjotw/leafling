@@ -788,3 +788,21 @@ fn mermaid_empty_block_renders_without_crash() {
         "expected mermaid block footer for empty block"
     );
 }
+
+#[test]
+fn blockquote_bold_link_preserves_link_color() {
+    let (ss, theme) = test_assets();
+    let src = "> text [**lien bold**](https://rivolink.mg)\n";
+    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let theme_colors = &app_theme().markdown;
+
+    let bq_line = &lines[0];
+    let link_span = bq_line.spans.iter().find(|s| s.content.as_ref() == "lien");
+    assert!(link_span.is_some(), "should find 'lien' span");
+    let span = link_span.unwrap();
+    assert_eq!(
+        span.style.fg,
+        Some(theme_colors.link_text),
+        "bold link in blockquote should preserve link_text color"
+    );
+}

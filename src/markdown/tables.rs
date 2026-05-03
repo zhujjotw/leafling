@@ -17,12 +17,28 @@ struct CellInlineStyle {
     link: bool,
 }
 
+impl CellInlineStyle {
+    fn modifiers(&self) -> Modifier {
+        let mut m = Modifier::empty();
+        if self.bold {
+            m |= Modifier::BOLD;
+        }
+        if self.italic {
+            m |= Modifier::ITALIC;
+        }
+        if self.strikethrough {
+            m |= Modifier::CROSSED_OUT;
+        }
+        m
+    }
+}
+
 #[derive(Clone)]
 enum CellFragment {
     Text(String, CellInlineStyle, bool),
     Code(String, bool),
     InlineMath(String, bool),
-    LinkMarker,
+    LinkMarker(CellInlineStyle),
 }
 
 impl CellFragment {
@@ -30,14 +46,14 @@ impl CellFragment {
         match self {
             CellFragment::Text(t, _, _) | CellFragment::Code(t, _) => t.clone(),
             CellFragment::InlineMath(t, _) => latex::to_unicode(t),
-            CellFragment::LinkMarker => "⌗".to_string(),
+            CellFragment::LinkMarker(_) => super::LINK_MARKER.to_string(),
         }
     }
 
     fn display_width(&self) -> usize {
         let w = display_width(&self.rendered_text());
         match self {
-            CellFragment::Text(_, _, _) | CellFragment::LinkMarker => w,
+            CellFragment::Text(_, _, _) | CellFragment::LinkMarker(_) => w,
             _ => w + 2,
         }
     }
@@ -109,6 +125,9 @@ pub(super) fn handle_table_event(
         }
         MdEvent::Start(Tag::Strong) => {
             tb.inline_style.bold = true;
+            if tb.inline_style.link {
+                tb.update_link_marker_modifier(|s| s.bold = true);
+            }
             true
         }
         MdEvent::End(TagEnd::Strong) => {
@@ -117,6 +136,9 @@ pub(super) fn handle_table_event(
         }
         MdEvent::Start(Tag::Emphasis) => {
             tb.inline_style.italic = true;
+            if tb.inline_style.link {
+                tb.update_link_marker_modifier(|s| s.italic = true);
+            }
             true
         }
         MdEvent::End(TagEnd::Emphasis) => {
@@ -125,6 +147,9 @@ pub(super) fn handle_table_event(
         }
         MdEvent::Start(Tag::Strikethrough) => {
             tb.inline_style.strikethrough = true;
+            if tb.inline_style.link {
+                tb.update_link_marker_modifier(|s| s.strikethrough = true);
+            }
             true
         }
         MdEvent::End(TagEnd::Strikethrough) => {
@@ -233,7 +258,18 @@ impl TableBuf {
         ));
     }
     fn push_link_marker(&mut self) {
-        self.current_cell.push(CellFragment::LinkMarker);
+        self.current_cell
+            .push(CellFragment::LinkMarker(self.inline_style));
+    }
+    fn update_link_marker_modifier(&mut self, f: impl Fn(&mut CellInlineStyle)) {
+        if let Some(CellFragment::LinkMarker(ref mut style)) = self
+            .current_cell
+            .iter_mut()
+            .rev()
+            .find(|frag| matches!(frag, CellFragment::LinkMarker(_)))
+        {
+            f(style);
+        }
     }
     fn push_code(&mut self, t: &str) {
         let adjacent = self.prev_ends_without_ws();
@@ -554,7 +590,7 @@ fn wrap_table_cell(frags: &[CellFragment], width: usize) -> Vec<Vec<CellFragment
                     current_width += word_width;
                 }
             }
-            CellFragment::LinkMarker => {
+            CellFragment::LinkMarker(_) => {
                 if current_width + 1 > width && current_width > 0 {
                     lines.push(std::mem::take(&mut current_line));
                     current_width = 0;
@@ -628,8 +664,11 @@ fn align_cell(
                 }
                 spans.push(Span::styled(expanded, style));
             }
-            CellFragment::LinkMarker => {
-                spans.push(Span::styled("⌗", Style::default().fg(theme.link_icon)));
+            CellFragment::LinkMarker(inline) => {
+                let style = Style::default()
+                    .fg(theme.link_icon)
+                    .add_modifier(inline.modifiers());
+                spans.push(Span::styled(super::LINK_MARKER, style));
                 content_width += 1;
             }
             CellFragment::Code(_, _) | CellFragment::InlineMath(_, _) => {

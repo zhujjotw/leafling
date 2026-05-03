@@ -47,12 +47,30 @@ struct ItemState {
     continuation_indent: usize,
 }
 
+const LINK_MARKER: &str = "⌗";
+
 #[derive(Clone, Copy, Default)]
 struct InlineStyleState {
     in_strong: bool,
     in_em: bool,
     in_strike: bool,
     in_link: bool,
+}
+
+impl InlineStyleState {
+    fn modifiers(&self) -> Modifier {
+        let mut m = Modifier::empty();
+        if self.in_strong {
+            m |= Modifier::BOLD;
+        }
+        if self.in_em {
+            m |= Modifier::ITALIC;
+        }
+        if self.in_strike {
+            m |= Modifier::CROSSED_OUT;
+        }
+        m
+    }
 }
 
 struct CodeBlockRenderContext<'a> {
@@ -681,27 +699,26 @@ fn inline_text_style(
     blockquote_depth: usize,
     inline: InlineStyleState,
 ) -> Style {
-    let mut style = if blockquote_depth > 0 {
+    let mut style = if inline.in_link {
+        let mut s = Style::default()
+            .fg(theme.link_text)
+            .add_modifier(Modifier::UNDERLINED);
+        if blockquote_depth > 0 {
+            s = s.add_modifier(Modifier::ITALIC);
+        }
+        s
+    } else if blockquote_depth > 0 {
         Style::default()
             .fg(theme.blockquote_text)
             .add_modifier(Modifier::ITALIC)
-    } else if inline.in_link {
-        Style::default()
-            .fg(theme.link_text)
-            .add_modifier(Modifier::UNDERLINED)
     } else {
         Style::default().fg(theme.text)
     };
 
-    if inline.in_strong {
-        style = style.fg(theme.strong_text).add_modifier(Modifier::BOLD);
+    if inline.in_strong && !inline.in_link {
+        style = style.fg(theme.strong_text);
     }
-    if inline.in_em {
-        style = style.add_modifier(Modifier::ITALIC);
-    }
-    if inline.in_strike {
-        style = style.add_modifier(Modifier::CROSSED_OUT);
-    }
+    style = style.add_modifier(inline.modifiers());
 
     style
 }
@@ -823,8 +840,29 @@ fn push_inline_latex_span(spans: &mut Vec<Span<'static>>, text: &str, theme: &Ma
     ));
 }
 
-fn push_link_marker(spans: &mut Vec<Span<'static>>, theme: &MarkdownTheme) {
-    spans.push(Span::styled("⌗", Style::default().fg(theme.link_icon)));
+fn push_link_marker(
+    spans: &mut Vec<Span<'static>>,
+    theme: &MarkdownTheme,
+    inline: InlineStyleState,
+    blockquote_depth: usize,
+) {
+    let mut style = Style::default()
+        .fg(theme.link_icon)
+        .add_modifier(inline.modifiers());
+    if blockquote_depth > 0 {
+        style = style.add_modifier(Modifier::ITALIC);
+    }
+    spans.push(Span::styled(LINK_MARKER, style));
+}
+
+fn update_link_marker_modifier(spans: &mut [Span<'static>], modifier: Modifier) {
+    if let Some(span) = spans
+        .iter_mut()
+        .rev()
+        .find(|s| s.content.as_ref() == LINK_MARKER)
+    {
+        span.style = span.style.add_modifier(modifier);
+    }
 }
 
 fn handle_inline_style_event(
@@ -832,10 +870,14 @@ fn handle_inline_style_event(
     inline: &mut InlineStyleState,
     spans: &mut Vec<Span<'static>>,
     theme: &MarkdownTheme,
+    blockquote_depth: usize,
 ) -> bool {
     match ev {
         MdEvent::Start(Tag::Strong) => {
             inline.in_strong = true;
+            if inline.in_link {
+                update_link_marker_modifier(spans, Modifier::BOLD);
+            }
             true
         }
         MdEvent::End(TagEnd::Strong) => {
@@ -844,6 +886,9 @@ fn handle_inline_style_event(
         }
         MdEvent::Start(Tag::Emphasis) => {
             inline.in_em = true;
+            if inline.in_link {
+                update_link_marker_modifier(spans, Modifier::ITALIC);
+            }
             true
         }
         MdEvent::End(TagEnd::Emphasis) => {
@@ -852,6 +897,9 @@ fn handle_inline_style_event(
         }
         MdEvent::Start(Tag::Strikethrough) => {
             inline.in_strike = true;
+            if inline.in_link {
+                update_link_marker_modifier(spans, Modifier::CROSSED_OUT);
+            }
             true
         }
         MdEvent::End(TagEnd::Strikethrough) => {
@@ -860,7 +908,7 @@ fn handle_inline_style_event(
         }
         MdEvent::Start(Tag::Link { .. }) => {
             inline.in_link = true;
-            push_link_marker(spans, theme);
+            push_link_marker(spans, theme, *inline, blockquote_depth);
             true
         }
         MdEvent::End(TagEnd::Link) => {
@@ -1026,7 +1074,7 @@ pub(crate) fn parse_markdown_with_width(
         if table.is_some() && handle_table_event(&mut table, &ev, &mut lines, render_width) {
             continue;
         }
-        if handle_inline_style_event(&ev, &mut inline, &mut spans, theme_colors) {
+        if handle_inline_style_event(&ev, &mut inline, &mut spans, theme_colors, blockquote_depth) {
             continue;
         }
 
