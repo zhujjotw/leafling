@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.18.2](https://github.com/RivoLink/leaf/releases/tag/1.18.2)] - 2026-05-03
+
+### Fixed
+
+- link style with modifiers ([#77](https://github.com/RivoLink/leaf/pull/77))
+- nested list parent merge ([#75](https://github.com/RivoLink/leaf/pull/75))
+- table cell extra-space ([#74](https://github.com/RivoLink/leaf/pull/74))
+- watch from config ([#73](https://github.com/RivoLink/leaf/pull/73))
+
 ## [[1.18.1](https://github.com/RivoLink/leaf/releases/tag/1.18.1)] - 2026-05-01
 
 ### Docs
