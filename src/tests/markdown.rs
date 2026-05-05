@@ -1,4 +1,4 @@
-use super::{rendered_non_empty_lines, test_assets};
+use super::{rendered_non_empty_lines, test_assets, test_md_theme};
 use crate::markdown::{parse_markdown, parse_markdown_with_width, resolve_syntax};
 use crate::theme::app_theme;
 use crate::*;
@@ -7,7 +7,7 @@ use syntect::parsing::SyntaxSet;
 #[test]
 fn h1_headings_render_double_rule_without_bottom_spacing() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("# 東京\n", &ss, &theme);
+    let (lines, _) = parse_markdown("# 東京\n", &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(rendered[0], "東京");
@@ -17,7 +17,7 @@ fn h1_headings_render_double_rule_without_bottom_spacing() {
 #[test]
 fn loose_list_items_keep_their_markers() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("- first\n\n- second\n", &ss, &theme);
+    let (lines, _) = parse_markdown("- first\n\n- second\n", &ss, &theme, &test_md_theme());
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
 
     assert!(rendered.iter().any(|line| line.contains("• first")));
@@ -27,7 +27,7 @@ fn loose_list_items_keep_their_markers() {
 #[test]
 fn ordered_lists_render_numeric_markers() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("3. third\n4. fourth\n", &ss, &theme);
+    let (lines, _) = parse_markdown("3. third\n4. fourth\n", &ss, &theme, &test_md_theme());
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
 
     assert!(rendered.iter().any(|line| line.contains("3. third")));
@@ -37,7 +37,12 @@ fn ordered_lists_render_numeric_markers() {
 #[test]
 fn multiline_list_items_keep_marker_only_on_first_line() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("- first line\n  second line\n", &ss, &theme);
+    let (lines, _) = parse_markdown(
+        "- first line\n  second line\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
 
     let first = rendered
@@ -57,7 +62,7 @@ fn multiline_list_items_keep_marker_only_on_first_line() {
 #[test]
 fn ordered_lists_preserve_non_default_start_numbers() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("7. seven\n8. eight\n", &ss, &theme);
+    let (lines, _) = parse_markdown("7. seven\n8. eight\n", &ss, &theme, &test_md_theme());
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
 
     assert!(rendered.iter().any(|line| line.contains("7. seven")));
@@ -68,7 +73,7 @@ fn ordered_lists_preserve_non_default_start_numbers() {
 fn loose_list_items_render_expected_lines() {
     let (ss, theme) = test_assets();
     let src = "- first loose item\n\n- second loose item after a blank line\n\n- third loose item\n\n  continuation paragraph\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(
@@ -86,7 +91,7 @@ fn loose_list_items_render_expected_lines() {
 fn ordered_loose_lists_render_expected_lines() {
     let (ss, theme) = test_assets();
     let src = "7. seventh item\n\n8. eighth item\n\n   continuation paragraph\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(
@@ -102,7 +107,12 @@ fn ordered_loose_lists_render_expected_lines() {
 #[test]
 fn ordered_lists_render_expected_lines() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("3. third item\n4. fourth item\n", &ss, &theme);
+    let (lines, _) = parse_markdown(
+        "3. third item\n4. fourth item\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(rendered, vec!["3. third item", "4. fourth item"]);
@@ -111,7 +121,12 @@ fn ordered_lists_render_expected_lines() {
 #[test]
 fn paragraph_and_following_list_have_no_blank_gap() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("Intro paragraph\n\n- first\n- second\n", &ss, &theme);
+    let (lines, _) = parse_markdown(
+        "Intro paragraph\n\n- first\n- second\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
     let intro_idx = rendered
         .iter()
@@ -125,7 +140,7 @@ fn paragraph_and_following_list_have_no_blank_gap() {
 fn wrapped_list_items_align_continuation_under_text() {
     let (ss, theme) = test_assets();
     let src = "- First item with enough text to wrap when the terminal is narrow and show continuation alignment.\n8. Eighth item with enough text to wrap and keep numeric alignment readable.\n";
-    let (lines, _) = parse_markdown_with_width(src, &ss, &theme, 36);
+    let (lines, _) = parse_markdown_with_width(src, &ss, &theme, 36, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(rendered.iter().any(|line| line.starts_with("• First item")));
@@ -144,7 +159,7 @@ fn wrapped_list_items_align_continuation_under_text() {
 fn tight_nested_list_separates_parent_and_children() {
     let (ss, theme) = test_assets();
     let src = "- parent\n  - child 1\n  - child 2\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(rendered, vec!["• parent", "  ◦ child 1", "  ◦ child 2"]);
@@ -154,7 +169,7 @@ fn tight_nested_list_separates_parent_and_children() {
 fn tight_nested_list_three_levels_uses_correct_markers() {
     let (ss, theme) = test_assets();
     let src = "- level 1\n  - level 2\n    - level 3\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(rendered, vec!["• level 1", "  ◦ level 2", "    ▸ level 3"]);
@@ -164,7 +179,7 @@ fn tight_nested_list_three_levels_uses_correct_markers() {
 fn tight_nested_list_unordered_parent_with_ordered_children() {
     let (ss, theme) = test_assets();
     let src = "- parent\n  1. first\n  2. second\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert_eq!(rendered, vec!["• parent", "  1. first", "  2. second"]);
@@ -174,7 +189,7 @@ fn tight_nested_list_unordered_parent_with_ordered_children() {
 fn tight_nested_list_multiline_parent_with_softbreak() {
     let (ss, theme) = test_assets();
     let src = "- parent line one\n  parent line two\n  - child\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(rendered.iter().any(|line| line == "• parent line one"));
@@ -188,7 +203,7 @@ fn tight_nested_list_multiline_parent_with_softbreak() {
 fn paragraph_and_following_code_block_have_no_blank_gap() {
     let (ss, theme) = test_assets();
     let src = "Intro paragraph\n\n```rs\nfn main() {}\n```\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered: Vec<String> = lines.iter().map(line_plain_text).collect();
     let intro_idx = rendered
         .iter()
@@ -202,7 +217,7 @@ fn paragraph_and_following_code_block_have_no_blank_gap() {
 fn nested_blockquotes_keep_quote_prefix_after_inner_quote_ends() {
     let (ss, theme) = test_assets();
     let src = "> outer\n> > inner\n> outer again\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(rendered.iter().any(|line| line == "▏ outer"));
@@ -214,7 +229,7 @@ fn nested_blockquotes_keep_quote_prefix_after_inner_quote_ends() {
 fn long_blockquotes_wrap_into_multiple_prefixed_lines() {
     let (ss, theme) = test_assets();
     let src = "> This is a long blockquote line that should wrap into multiple quoted lines at narrow widths.\n";
-    let (lines, _) = parse_markdown_with_width(src, &ss, &theme, 28);
+    let (lines, _) = parse_markdown_with_width(src, &ss, &theme, 28, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
     let quoted: Vec<_> = rendered
         .into_iter()
@@ -228,7 +243,12 @@ fn long_blockquotes_wrap_into_multiple_prefixed_lines() {
 #[test]
 fn toc_only_includes_first_two_heading_levels() {
     let (ss, theme) = test_assets();
-    let (_, toc) = parse_markdown("# One\n## Two\n### Three\n#### Four\n", &ss, &theme);
+    let (_, toc) = parse_markdown(
+        "# One\n## Two\n### Three\n#### Four\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
 
     assert_eq!(toc.len(), 3);
     assert_eq!(toc[0].level, 1);
@@ -240,7 +260,7 @@ fn toc_only_includes_first_two_heading_levels() {
 fn frontmatter_is_ignored_in_preview_and_toc() {
     let (ss, theme) = test_assets();
     let src = "---\ntitle: Demo\nowner: me\n---\n# Visible\nBody\n";
-    let (lines, toc) = parse_markdown(src, &ss, &theme);
+    let (lines, toc) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(!rendered.iter().any(|line| line.contains("title: Demo")));
@@ -252,7 +272,13 @@ fn frontmatter_is_ignored_in_preview_and_toc() {
 #[test]
 fn h2_headings_are_underlined_and_compact() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown_with_width("Intro\n\n## Section\nBody\n", &ss, &theme, 40);
+    let (lines, _) = parse_markdown_with_width(
+        "Intro\n\n## Section\nBody\n",
+        &ss,
+        &theme,
+        40,
+        &test_md_theme(),
+    );
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(rendered.iter().any(|line| line.contains("Section")));
@@ -262,7 +288,8 @@ fn h2_headings_are_underlined_and_compact() {
 #[test]
 fn rules_use_render_width_without_extra_blank_after() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown_with_width("Alpha\n\n---\nBeta\n", &ss, &theme, 24);
+    let (lines, _) =
+        parse_markdown_with_width("Alpha\n\n---\nBeta\n", &ss, &theme, 24, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
     let rule = rendered
         .iter()
@@ -352,7 +379,7 @@ fn resolve_syntax_supports_common_language_aliases() {
 fn narrow_tables_fit_render_width_and_wrap_cells() {
     let (ss, theme) = test_assets();
     let md = "| Column | Description | Value |\n| --- | --- | ---: |\n| Width | Terminal-dependent layout behavior | 80 |\n";
-    let (lines, _) = parse_markdown_with_width(md, &ss, &theme, 36);
+    let (lines, _) = parse_markdown_with_width(md, &ss, &theme, 36, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(rendered.len() >= 6);
@@ -363,7 +390,7 @@ fn narrow_tables_fit_render_width_and_wrap_cells() {
 fn wrapped_list_inline_code_keeps_left_padding_in_rendered_line() {
     let (ss, theme) = test_assets();
     let source = "- `leaf --theme ocean README.md` exercises wrapping inside a list item.\n";
-    let (lines, _) = parse_markdown_with_width(source, &ss, &theme, 22);
+    let (lines, _) = parse_markdown_with_width(source, &ss, &theme, 22, &test_md_theme());
 
     let target = lines
         .iter()
@@ -383,7 +410,7 @@ fn wrapped_list_inline_code_keeps_left_padding_in_rendered_line() {
 fn code_block_inside_list_item_is_indented_and_has_no_blank_gap_before() {
     let (ss, theme) = test_assets();
     let md = "To put a code block within a list item, the code block needs\nto be indented *twice* -- 8 spaces or two tabs:\n\n*   A list item with a code block:\n\n        <code goes here>\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     let item_idx = rendered
@@ -411,7 +438,12 @@ fn code_block_inside_list_item_is_indented_and_has_no_blank_gap_before() {
 #[test]
 fn inline_latex_renders_with_latex_style() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("The formula $x^2 + y^2$ is here.\n", &ss, &theme);
+    let (lines, _) = parse_markdown(
+        "The formula $x^2 + y^2$ is here.\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
 
     let latex_line = lines
         .iter()
@@ -433,7 +465,7 @@ fn inline_latex_renders_with_latex_style() {
 #[test]
 fn display_latex_renders_in_framed_block() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("$$E = mc^2$$\n", &ss, &theme);
+    let (lines, _) = parse_markdown("$$E = mc^2$$\n", &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(
@@ -453,7 +485,12 @@ fn display_latex_renders_in_framed_block() {
 #[test]
 fn inline_latex_is_searchable() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("Check $\\alpha + \\beta$ here.\n", &ss, &theme);
+    let (lines, _) = parse_markdown(
+        "Check $\\alpha + \\beta$ here.\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
     let searchable: Vec<String> = lines.iter().map(line_plain_text).collect();
 
     assert!(
@@ -465,7 +502,7 @@ fn inline_latex_is_searchable() {
 #[test]
 fn display_latex_in_blockquote_has_quote_prefix() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("> $$F = ma$$\n", &ss, &theme);
+    let (lines, _) = parse_markdown("> $$F = ma$$\n", &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     let header = rendered
@@ -482,7 +519,7 @@ fn display_latex_in_blockquote_has_quote_prefix() {
 fn table_inline_code_has_code_style() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| `code` |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let app_theme = app_theme();
     let theme_colors = &app_theme.markdown;
 
@@ -501,7 +538,7 @@ fn table_inline_code_has_code_style() {
 fn table_inline_code_has_padding() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| `x` |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let app_theme = app_theme();
     let theme_colors = &app_theme.markdown;
 
@@ -520,7 +557,7 @@ fn table_inline_code_has_padding() {
 fn table_inline_math_renders_with_latex_style() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| $\\alpha$ |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let app_theme = app_theme();
     let theme_colors = &app_theme.markdown;
 
@@ -539,7 +576,7 @@ fn table_inline_math_renders_with_latex_style() {
 fn table_mixed_text_and_code_renders_both_styles() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| hello `world` bye |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let app_theme = app_theme();
     let theme_colors = &app_theme.markdown;
 
@@ -562,7 +599,7 @@ fn table_mixed_text_and_code_renders_both_styles() {
 fn table_without_inline_styles_renders_normally() {
     let (ss, theme) = test_assets();
     let md = "| A | B |\n|---|---|\n| one | two |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(rendered.iter().any(|line| line.contains("one")));
@@ -573,7 +610,7 @@ fn table_without_inline_styles_renders_normally() {
 fn table_inline_code_col_width_includes_padding() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| `longcode` |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     let top_border = rendered.iter().find(|l| l.contains('┌')).unwrap();
@@ -590,7 +627,7 @@ fn table_inline_code_col_width_includes_padding() {
 fn table_code_adjacent_text_no_extra_space() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| `code`:text |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
     let cell_line = rendered
         .iter()
@@ -606,7 +643,7 @@ fn table_code_adjacent_text_no_extra_space() {
 fn table_bold_adjacent_text_no_extra_space() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| **bold**:text |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
     let cell_line = rendered
         .iter()
@@ -622,7 +659,7 @@ fn table_bold_adjacent_text_no_extra_space() {
 fn table_apostrophe_no_split() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| apos'trophe |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme);
+    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
     let cell_line = rendered
         .iter()
@@ -637,7 +674,12 @@ fn table_apostrophe_no_split() {
 #[test]
 fn mermaid_block_renders_in_framed_block() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("```mermaid\ngraph TD\n  A --> B\n```\n", &ss, &theme);
+    let (lines, _) = parse_markdown(
+        "```mermaid\ngraph TD\n  A --> B\n```\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+    );
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(
@@ -665,6 +707,7 @@ fn mermaid_block_in_blockquote_has_quote_prefix() {
         "> ```mermaid\n> graph LR\n>   X --> Y\n> ```\n",
         &ss,
         &theme,
+        &test_md_theme(),
     );
     let rendered = rendered_non_empty_lines(&lines);
 
@@ -685,6 +728,7 @@ fn mermaid_content_is_searchable() {
         "```mermaid\nsequenceDiagram\n  A->>B: Hello\n```\n",
         &ss,
         &theme,
+        &test_md_theme(),
     );
     let searchable = markdown::width::build_searchable_lines(&lines);
 
@@ -705,6 +749,7 @@ fn mermaid_rendered_block_has_no_gutter() {
         "```mermaid\ngraph TD\n  A --> B\n  B --> C\n```\n",
         &ss,
         &theme,
+        &test_md_theme(),
     );
     let rendered = rendered_non_empty_lines(&lines);
     let content_lines: Vec<_> = rendered
@@ -722,7 +767,7 @@ fn mermaid_rendered_block_has_no_gutter() {
 fn mermaid_fallback_has_numbered_gutter() {
     let (ss, theme) = test_assets();
     let src = "```mermaid\ngantt\n  title Schedule\n  section Dev\n```\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(
@@ -735,7 +780,7 @@ fn mermaid_fallback_has_numbered_gutter() {
 fn mermaid_pie_renders_bar_chart() {
     let (ss, theme) = test_assets();
     let src = "```mermaid\npie title Languages\n  \"Rust\" : 65\n  \"Go\" : 35\n```\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(
@@ -764,7 +809,7 @@ fn mermaid_pie_renders_bar_chart() {
 fn mermaid_unsupported_type_falls_back_to_colored_source() {
     let (ss, theme) = test_assets();
     let src = "```mermaid\ngantt\n  title Schedule\n  section Phase 1\n```\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(
@@ -780,7 +825,7 @@ fn mermaid_unsupported_type_falls_back_to_colored_source() {
 #[test]
 fn mermaid_empty_block_renders_without_crash() {
     let (ss, theme) = test_assets();
-    let (lines, _) = parse_markdown("```mermaid\n```\n", &ss, &theme);
+    let (lines, _) = parse_markdown("```mermaid\n```\n", &ss, &theme, &test_md_theme());
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(
@@ -797,7 +842,7 @@ fn mermaid_empty_block_renders_without_crash() {
 fn blockquote_bold_link_preserves_link_color() {
     let (ss, theme) = test_assets();
     let src = "> text [**lien bold**](https://rivolink.mg)\n";
-    let (lines, _) = parse_markdown(src, &ss, &theme);
+    let (lines, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
     let app_theme = app_theme();
     let theme_colors = &app_theme.markdown;
 

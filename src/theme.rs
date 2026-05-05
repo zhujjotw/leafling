@@ -8,6 +8,7 @@ use std::{
     collections::BTreeMap,
     fmt,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::RwLock,
 };
 use syntect::{highlighting::Theme, highlighting::ThemeSet};
@@ -665,25 +666,7 @@ pub(crate) fn parse_theme_color(value: &str) -> Option<Color> {
         return Some(color);
     }
 
-    match value.to_ascii_lowercase().as_str() {
-        "black" => Some(Color::Black),
-        "red" => Some(Color::Red),
-        "green" => Some(Color::Green),
-        "yellow" => Some(Color::Yellow),
-        "blue" => Some(Color::Blue),
-        "magenta" => Some(Color::Magenta),
-        "cyan" => Some(Color::Cyan),
-        "gray" | "grey" => Some(Color::Gray),
-        "dark-gray" | "dark-grey" => Some(Color::DarkGray),
-        "light-red" => Some(Color::LightRed),
-        "light-green" => Some(Color::LightGreen),
-        "light-yellow" => Some(Color::LightYellow),
-        "light-blue" => Some(Color::LightBlue),
-        "light-magenta" => Some(Color::LightMagenta),
-        "light-cyan" => Some(Color::LightCyan),
-        "white" => Some(Color::White),
-        _ => None,
-    }
+    Color::from_str(value).ok()
 }
 
 fn parse_hex_color(value: &str) -> Option<Color> {
@@ -864,10 +847,11 @@ pub(crate) fn app_theme() -> AppTheme {
 }
 
 pub(crate) fn current_syntect_theme(themes: &ThemeSet) -> &Theme {
-    let theme = app_theme();
+    let selection = current_theme_selection();
+    let name = selection.syntax_theme_name();
     themes
         .themes
-        .get(theme.syntax_theme_name.as_ref())
+        .get(name)
         .or_else(|| {
             themes
                 .themes

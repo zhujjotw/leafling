@@ -22,7 +22,8 @@ use markdown::{hash_str, parse_markdown, read_file_state};
 use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
 use theme::{
-    current_syntect_theme, resolve_theme_selection, set_theme_selection, validate_theme_syntax,
+    app_theme, current_syntect_theme, resolve_theme_selection, set_theme_selection,
+    validate_theme_syntax,
 };
 use update::run_update;
 
@@ -46,8 +47,8 @@ pub(crate) use render::wrap_path_lines;
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
 pub(crate) use theme::{
-    app_theme, parse_theme_color, parse_theme_preset, theme_preset_label, CustomThemeConfig,
-    ThemePreset, ThemeSelection, THEME_PRESETS,
+    parse_theme_color, parse_theme_preset, theme_preset_label, CustomThemeConfig, ThemePreset,
+    ThemeSelection, THEME_PRESETS,
 };
 #[cfg(test)]
 pub(crate) use update::{
@@ -211,7 +212,8 @@ fn main() -> Result<()> {
     let last_file_state = filepath.as_ref().and_then(read_file_state);
     let last_content_hash = hash_str(&src);
 
-    let (lines, toc) = parse_markdown(&src, &ss, &theme);
+    let at = app_theme();
+    let (lines, toc) = parse_markdown(&src, &ss, &theme, &at.markdown);
     let mut app = App::new_with_source(
         lines,
         toc,

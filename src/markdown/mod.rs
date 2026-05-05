@@ -11,7 +11,7 @@ pub(crate) use width::{
     build_searchable_lines, display_width, line_plain_text, truncate_display_width,
 };
 
-use crate::theme::{app_theme, MarkdownTheme};
+use crate::theme::MarkdownTheme;
 use pulldown_cmark::{CodeBlockKind, Event as MdEvent, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -100,9 +100,7 @@ pub(crate) fn hash_file_contents(path: &PathBuf) -> io::Result<u64> {
     std::fs::read_to_string(path).map(|contents| hash_str(&contents))
 }
 
-pub(crate) fn highlight_line<'a>(line: &Line<'a>) -> Line<'a> {
-    let app_theme = app_theme();
-    let theme = &app_theme.markdown;
+pub(crate) fn highlight_line<'a>(line: &Line<'a>, theme: &MarkdownTheme) -> Line<'a> {
     Line::from(
         line.spans
             .iter()
@@ -249,9 +247,7 @@ fn highlight_code(
     (out, inner_width, digit_width)
 }
 
-fn block_prefix(in_bq: bool) -> Vec<Span<'static>> {
-    let app_theme = app_theme();
-    let theme = &app_theme.markdown;
+fn block_prefix(in_bq: bool, theme: &MarkdownTheme) -> Vec<Span<'static>> {
     if in_bq {
         vec![Span::styled(
             "▏ ",
@@ -266,10 +262,9 @@ fn list_item_prefix(
     in_bq: bool,
     list_stack: &[ListKind],
     item_stack: &mut [ItemState],
+    theme: &MarkdownTheme,
 ) -> Vec<Span<'static>> {
-    let app_theme = app_theme();
-    let theme = &app_theme.markdown;
-    let mut prefix = block_prefix(in_bq);
+    let mut prefix = block_prefix(in_bq, theme);
     let Some(item) = item_stack.last_mut() else {
         return prefix;
     };
@@ -309,8 +304,9 @@ fn push_wrapped_blockquote_lines(
     lines: &mut Vec<Line<'static>>,
     body_spans: &mut Vec<Span<'static>>,
     render_width: usize,
+    theme: &MarkdownTheme,
 ) {
-    let prefix = block_prefix(true);
+    let prefix = block_prefix(true, theme);
     push_wrapped_prefixed_lines(lines, body_spans, prefix.clone(), prefix, render_width);
 }
 
@@ -321,12 +317,14 @@ fn flush_wrapped_spans(
     list_stack: &[ListKind],
     item_stack: &mut [ItemState],
     render_width: usize,
+    theme: &MarkdownTheme,
 ) {
     if blockquote_depth > 0 && item_stack.is_empty() {
-        push_wrapped_blockquote_lines(lines, spans, render_width);
+        push_wrapped_blockquote_lines(lines, spans, render_width, theme);
     } else if !item_stack.is_empty() {
-        let first_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
-        let continuation_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
+        let first_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack, theme);
+        let continuation_prefix =
+            list_item_prefix(blockquote_depth > 0, list_stack, item_stack, theme);
         push_wrapped_prefixed_lines(
             lines,
             spans,
@@ -335,7 +333,7 @@ fn flush_wrapped_spans(
             render_width,
         );
     } else if !spans.is_empty() {
-        let mut all = block_prefix(false);
+        let mut all = block_prefix(false, theme);
         all.append(spans);
         lines.push(Line::from(all));
     }
@@ -416,9 +414,14 @@ fn push_code_block_lines(
     item_stack: &mut [ItemState],
 ) {
     let prefix = if !item_stack.is_empty() {
-        list_item_prefix(ctx.blockquote_depth > 0, ctx.list_stack, item_stack)
+        list_item_prefix(
+            ctx.blockquote_depth > 0,
+            ctx.list_stack,
+            item_stack,
+            ctx.theme_colors,
+        )
     } else if ctx.blockquote_depth > 0 {
-        block_prefix(true)
+        block_prefix(true, ctx.theme_colors)
     } else {
         Vec::new()
     };
@@ -515,9 +518,9 @@ fn push_special_block_lines<F: Fn(&str) -> Vec<Span<'static>>>(
     let show_line_numbers = ctx.show_line_numbers;
     let center = ctx.center;
     let prefix = if !item_stack.is_empty() {
-        list_item_prefix(blockquote_depth > 0, list_stack, item_stack)
+        list_item_prefix(blockquote_depth > 0, list_stack, item_stack, theme)
     } else if blockquote_depth > 0 {
-        block_prefix(true)
+        block_prefix(true, theme)
     } else {
         Vec::new()
     };
@@ -733,13 +736,14 @@ fn flush_list_item_spans(
     item_stack: &mut [ItemState],
     blockquote_depth: usize,
     render_width: usize,
+    theme: &MarkdownTheme,
 ) {
     if spans.is_empty() {
         return;
     }
 
-    let first_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
-    let continuation_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack);
+    let first_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack, theme);
+    let continuation_prefix = list_item_prefix(blockquote_depth > 0, list_stack, item_stack, theme);
     push_wrapped_prefixed_lines(
         lines,
         spans,
@@ -783,6 +787,7 @@ fn end_item(
     item_stack: &mut Vec<ItemState>,
     blockquote_depth: usize,
     render_width: usize,
+    theme: &MarkdownTheme,
 ) {
     flush_list_item_spans(
         lines,
@@ -791,6 +796,7 @@ fn end_item(
         item_stack,
         blockquote_depth,
         render_width,
+        theme,
     );
     item_stack.pop();
     if let Some(ListKind::Ordered(next)) = list_stack.last_mut() {
@@ -973,27 +979,6 @@ fn start_code_block(
     };
 }
 
-fn end_line_break(
-    lines: &mut Vec<Line<'static>>,
-    spans: &mut Vec<Span<'static>>,
-    in_code: bool,
-    blockquote_depth: usize,
-    list_stack: &[ListKind],
-    item_stack: &mut [ItemState],
-    render_width: usize,
-) {
-    if !in_code {
-        flush_wrapped_spans(
-            lines,
-            spans,
-            blockquote_depth,
-            list_stack,
-            item_stack,
-            render_width,
-        );
-    }
-}
-
 fn end_paragraph(
     lines: &mut Vec<Line<'static>>,
     spans: &mut Vec<Span<'static>>,
@@ -1001,6 +986,7 @@ fn end_paragraph(
     list_stack: &[ListKind],
     item_stack: &mut [ItemState],
     render_width: usize,
+    theme: &MarkdownTheme,
 ) {
     flush_wrapped_spans(
         lines,
@@ -1009,6 +995,7 @@ fn end_paragraph(
         list_stack,
         item_stack,
         render_width,
+        theme,
     );
     lines.push(Line::from(""));
 }
@@ -1036,8 +1023,9 @@ pub(crate) fn parse_markdown(
     src: &str,
     ss: &SyntaxSet,
     theme: &Theme,
+    md_theme: &MarkdownTheme,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>) {
-    parse_markdown_with_width(src, ss, theme, DEFAULT_RENDER_WIDTH)
+    parse_markdown_with_width(src, ss, theme, DEFAULT_RENDER_WIDTH, md_theme)
 }
 
 fn rule_width(render_width: usize, indent: usize) -> usize {
@@ -1049,9 +1037,8 @@ pub(crate) fn parse_markdown_with_width(
     ss: &SyntaxSet,
     theme: &Theme,
     render_width: usize,
+    theme_colors: &MarkdownTheme,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>) {
-    let app_theme = app_theme();
-    let theme_colors = &app_theme.markdown;
     let (src, fm_pairs) = frontmatter::extract_frontmatter(src);
     let mut lines: Vec<Line<'static>> = Vec::new();
 
@@ -1109,6 +1096,7 @@ pub(crate) fn parse_markdown_with_width(
                     &list_stack,
                     &mut item_stack,
                     render_width,
+                    theme_colors,
                 );
                 last_block = LastBlock::Paragraph;
             }
@@ -1186,6 +1174,7 @@ pub(crate) fn parse_markdown_with_width(
                         &mut item_stack,
                         blockquote_depth,
                         render_width,
+                        theme_colors,
                     );
                 }
                 start_list(&mut lines, last_block, &mut list_stack, start);
@@ -1206,6 +1195,7 @@ pub(crate) fn parse_markdown_with_width(
                     &mut item_stack,
                     blockquote_depth,
                     render_width,
+                    theme_colors,
                 );
                 last_block = LastBlock::Other;
             }
@@ -1224,17 +1214,18 @@ pub(crate) fn parse_markdown_with_width(
                     inline,
                 );
             }
-            MdEvent::SoftBreak | MdEvent::HardBreak => {
-                end_line_break(
+            MdEvent::SoftBreak | MdEvent::HardBreak if !in_code => {
+                flush_wrapped_spans(
                     &mut lines,
                     &mut spans,
-                    in_code,
                     blockquote_depth,
                     &list_stack,
                     &mut item_stack,
                     render_width,
+                    theme_colors,
                 );
             }
+            MdEvent::SoftBreak | MdEvent::HardBreak => {}
             MdEvent::InlineMath(text) => {
                 push_inline_latex_span(&mut spans, text.as_ref(), theme_colors);
             }
