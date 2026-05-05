@@ -1,5 +1,15 @@
 use ratatui::style::Color;
-use std::sync::atomic::{AtomicU8, Ordering};
+use serde::{
+    de::{Error as DeError, SeqAccess, Visitor},
+    Deserialize, Deserializer,
+};
+use std::{
+    borrow::Cow,
+    collections::BTreeMap,
+    fmt,
+    path::{Path, PathBuf},
+    sync::RwLock,
+};
 use syntect::{highlighting::Theme, highlighting::ThemeSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -17,14 +27,14 @@ impl Default for ThemePreset {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AppTheme {
-    pub(crate) syntax_theme_name: &'static str,
+    pub(crate) syntax_theme_name: Cow<'static, str>,
     pub(crate) ui: UiTheme,
     pub(crate) markdown: MarkdownTheme,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct UiTheme {
     pub(crate) toc_bg: Color,
     pub(crate) toc_border: Color,
@@ -61,7 +71,7 @@ pub(crate) struct UiTheme {
     pub(crate) toc_secondary_text_inactive: Color,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct MarkdownTheme {
     pub(crate) search_highlight_bg: Color,
     pub(crate) code_gutter: Color,
@@ -246,13 +256,13 @@ const BASE_DARK_MARKDOWN: MarkdownTheme = MarkdownTheme {
 };
 
 pub(crate) const ARCTIC_THEME: AppTheme = AppTheme {
-    syntax_theme_name: "base16-ocean.light",
+    syntax_theme_name: Cow::Borrowed("base16-ocean.light"),
     ui: BASE_LIGHT_UI,
     markdown: BASE_LIGHT_MARKDOWN,
 };
 
 pub(crate) const FOREST_THEME: AppTheme = AppTheme {
-    syntax_theme_name: "InspiredGitHub",
+    syntax_theme_name: Cow::Borrowed("InspiredGitHub"),
     ui: UiTheme {
         toc_bg: Color::Rgb(16, 22, 18),
         toc_border: Color::Rgb(50, 66, 54),
@@ -327,13 +337,13 @@ pub(crate) const FOREST_THEME: AppTheme = AppTheme {
 };
 
 pub(crate) const OCEAN_DARK_THEME: AppTheme = AppTheme {
-    syntax_theme_name: "base16-ocean.dark",
+    syntax_theme_name: Cow::Borrowed("base16-ocean.dark"),
     ui: BASE_DARK_UI,
     markdown: BASE_DARK_MARKDOWN,
 };
 
 pub(crate) const SOLARIZED_DARK_THEME: AppTheme = AppTheme {
-    syntax_theme_name: "Solarized (dark)",
+    syntax_theme_name: Cow::Borrowed("Solarized (dark)"),
     ui: UiTheme {
         toc_bg: Color::Rgb(7, 54, 66),
         toc_border: Color::Rgb(88, 110, 117),
@@ -414,7 +424,223 @@ pub(crate) const THEME_PRESETS: [ThemePreset; 4] = [
     ThemePreset::OceanDark,
     ThemePreset::SolarizedDark,
 ];
-static CURRENT_PRESET: AtomicU8 = AtomicU8::new(DEFAULT_PRESET as u8);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CustomTheme {
+    pub(crate) name: String,
+    pub(crate) base_preset: ThemePreset,
+    pub(crate) theme: AppTheme,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ThemeSelection {
+    Preset(ThemePreset),
+    Custom(Box<CustomTheme>),
+}
+
+impl Default for ThemeSelection {
+    fn default() -> Self {
+        Self::Preset(DEFAULT_PRESET)
+    }
+}
+
+impl ThemeSelection {
+    pub(crate) fn as_preset(&self) -> Option<ThemePreset> {
+        match self {
+            Self::Preset(preset) => Some(*preset),
+            Self::Custom(_) => None,
+        }
+    }
+
+    pub(crate) fn preset_hint(&self) -> ThemePreset {
+        match self {
+            Self::Preset(preset) => *preset,
+            Self::Custom(custom) => custom.base_preset,
+        }
+    }
+
+    pub(crate) fn app_theme(&self) -> AppTheme {
+        match self {
+            Self::Preset(preset) => theme_by_preset(*preset).clone(),
+            Self::Custom(custom) => custom.theme.clone(),
+        }
+    }
+
+    pub(crate) fn syntax_theme_name(&self) -> &str {
+        match self {
+            Self::Preset(preset) => theme_by_preset(*preset).syntax_theme_name.as_ref(),
+            Self::Custom(custom) => custom.theme.syntax_theme_name.as_ref(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ThemeColor(pub(crate) Color);
+
+impl<'de> Deserialize<'de> for ThemeColor {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ColorVisitor;
+
+        impl<'de> Visitor<'de> for ColorVisitor {
+            type Value = ThemeColor;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a color name, hex color string, rgb(...) string, or [r, g, b]")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                parse_theme_color(value)
+                    .map(ThemeColor)
+                    .ok_or_else(|| E::custom(format!("invalid theme color: {value}")))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: DeError,
+            {
+                self.visit_str(&value)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let r = read_rgb_component(&mut seq, "red")?;
+                let g = read_rgb_component(&mut seq, "green")?;
+                let b = read_rgb_component(&mut seq, "blue")?;
+                if seq.next_element::<u16>()?.is_some() {
+                    return Err(A::Error::custom(
+                        "theme RGB array must contain exactly 3 values",
+                    ));
+                }
+                Ok(ThemeColor(Color::Rgb(r, g, b)))
+            }
+        }
+
+        deserializer.deserialize_any(ColorVisitor)
+    }
+}
+
+fn read_rgb_component<'de, A>(seq: &mut A, name: &str) -> Result<u8, A::Error>
+where
+    A: SeqAccess<'de>,
+{
+    let value = seq
+        .next_element::<u16>()?
+        .ok_or_else(|| A::Error::custom(format!("missing {name} theme color component")))?;
+    u8::try_from(value)
+        .map_err(|_| A::Error::custom(format!("{name} theme color component out of range")))
+}
+
+macro_rules! theme_overrides {
+    ($name:ident for $theme:ty { $($field:ident),+ $(,)? }) => {
+        #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+        #[serde(default)]
+        pub(crate) struct $name {
+            $(pub(crate) $field: Option<ThemeColor>,)+
+        }
+
+        impl $name {
+            fn apply_to(&self, theme: &mut $theme) {
+                $(
+                    if let Some(color) = self.$field {
+                        theme.$field = color.0;
+                    }
+                )+
+            }
+        }
+    };
+}
+
+theme_overrides!(UiThemeOverrides for UiTheme {
+    toc_bg,
+    toc_border,
+    content_bg,
+    scrollbar_hover,
+    status_bg,
+    status_separator,
+    status_brand_fg,
+    status_brand_bg,
+    status_filename_fg,
+    status_filename_bg,
+    status_watch_fg,
+    status_watch_bg,
+    status_reloaded_fg,
+    status_reloaded_bg,
+    status_search_fg,
+    status_search_bg,
+    status_success_fg,
+    status_success_bg,
+    status_warning_fg,
+    status_error_fg,
+    status_error_bg,
+    status_shortcut_fg,
+    status_percent_fg,
+    toc_header_fg,
+    toc_active_bg,
+    toc_inactive_bg,
+    toc_accent,
+    toc_index_inactive,
+    toc_primary_active,
+    toc_primary_inactive,
+    toc_secondary_inactive,
+    toc_secondary_text_active,
+    toc_secondary_text_inactive,
+});
+
+theme_overrides!(MarkdownThemeOverrides for MarkdownTheme {
+    search_highlight_bg,
+    code_gutter,
+    blockquote_marker,
+    list_level_1,
+    list_level_2,
+    list_level_3,
+    ordered_list,
+    table_border,
+    table_separator,
+    table_header,
+    table_cell,
+    heading_1,
+    heading_2,
+    heading_3,
+    heading_4,
+    heading_other,
+    heading_underline,
+    code_frame,
+    code_label,
+    inline_code_fg,
+    inline_code_bg,
+    rule,
+    link_icon,
+    link_text,
+    blockquote_text,
+    text,
+    strong_text,
+    latex_inline_fg,
+    latex_inline_bg,
+    latex_block_fg,
+    mermaid_keyword,
+    mermaid_arrow,
+    mermaid_label,
+    mermaid_block_fg,
+});
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub(crate) struct CustomThemeConfig {
+    pub(crate) base: Option<String>,
+    pub(crate) syntax: Option<String>,
+    pub(crate) ui: UiThemeOverrides,
+    pub(crate) markdown: MarkdownThemeOverrides,
+}
+
+static CURRENT_THEME: RwLock<ThemeSelection> = RwLock::new(ThemeSelection::Preset(DEFAULT_PRESET));
 
 pub(crate) fn parse_theme_preset(name: &str) -> Option<ThemePreset> {
     match name {
@@ -424,6 +650,168 @@ pub(crate) fn parse_theme_preset(name: &str) -> Option<ThemePreset> {
         "solarized" | "solarized-dark" => Some(ThemePreset::SolarizedDark),
         _ => None,
     }
+}
+
+pub(crate) fn parse_theme_color(value: &str) -> Option<Color> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Some(color) = parse_hex_color(value) {
+        return Some(color);
+    }
+    if let Some(color) = parse_rgb_color(value) {
+        return Some(color);
+    }
+
+    match value.to_ascii_lowercase().as_str() {
+        "black" => Some(Color::Black),
+        "red" => Some(Color::Red),
+        "green" => Some(Color::Green),
+        "yellow" => Some(Color::Yellow),
+        "blue" => Some(Color::Blue),
+        "magenta" => Some(Color::Magenta),
+        "cyan" => Some(Color::Cyan),
+        "gray" | "grey" => Some(Color::Gray),
+        "dark-gray" | "dark-grey" => Some(Color::DarkGray),
+        "light-red" => Some(Color::LightRed),
+        "light-green" => Some(Color::LightGreen),
+        "light-yellow" => Some(Color::LightYellow),
+        "light-blue" => Some(Color::LightBlue),
+        "light-magenta" => Some(Color::LightMagenta),
+        "light-cyan" => Some(Color::LightCyan),
+        "white" => Some(Color::White),
+        _ => None,
+    }
+}
+
+fn parse_hex_color(value: &str) -> Option<Color> {
+    let hex = value.strip_prefix('#').unwrap_or(value);
+    match hex.len() {
+        3 if hex.chars().all(|c| c.is_ascii_hexdigit()) => {
+            let mut expanded = String::with_capacity(6);
+            for ch in hex.chars() {
+                expanded.push(ch);
+                expanded.push(ch);
+            }
+            parse_hex_color(&expanded)
+        }
+        6 if hex.chars().all(|c| c.is_ascii_hexdigit()) => {
+            let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+            let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+            Some(Color::Rgb(r, g, b))
+        }
+        _ => None,
+    }
+}
+
+fn parse_rgb_color(value: &str) -> Option<Color> {
+    let value = value.trim();
+    let inner = value.strip_prefix("rgb(")?.strip_suffix(')')?;
+    let mut components = inner.split(',').map(str::trim);
+    let r = components.next()?.parse::<u8>().ok()?;
+    let g = components.next()?.parse::<u8>().ok()?;
+    let b = components.next()?.parse::<u8>().ok()?;
+    if components.next().is_some() {
+        return None;
+    }
+    Some(Color::Rgb(r, g, b))
+}
+
+pub(crate) fn resolve_theme_selection(
+    name: &str,
+    custom_themes: &BTreeMap<String, CustomThemeConfig>,
+    theme_file_base_dir: Option<&Path>,
+) -> Result<ThemeSelection, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Theme name cannot be empty".to_string());
+    }
+
+    if let Some(preset) = parse_theme_preset(name) {
+        return Ok(ThemeSelection::Preset(preset));
+    }
+
+    if let Some(custom_config) = custom_themes.get(name) {
+        return custom_theme_selection(name, custom_config);
+    }
+
+    if looks_like_theme_file(name) {
+        return resolve_theme_file_selection(name, theme_file_base_dir);
+    }
+
+    Err(format!("Unknown theme \"{name}\""))
+}
+
+fn custom_theme_selection(
+    name: &str,
+    custom_config: &CustomThemeConfig,
+) -> Result<ThemeSelection, String> {
+    let base_preset = match custom_config.base.as_deref() {
+        Some(base) => parse_theme_preset(base)
+            .ok_or_else(|| format!("Unknown base theme \"{base}\" for custom theme \"{name}\""))?,
+        None => DEFAULT_PRESET,
+    };
+
+    let mut theme = theme_by_preset(base_preset).clone();
+    if let Some(syntax) = custom_config.syntax.as_deref() {
+        let syntax = syntax.trim();
+        if syntax.is_empty() {
+            return Err(format!("Empty syntax theme for custom theme \"{name}\""));
+        }
+        theme.syntax_theme_name = Cow::Owned(syntax.to_string());
+    }
+    custom_config.ui.apply_to(&mut theme.ui);
+    custom_config.markdown.apply_to(&mut theme.markdown);
+
+    Ok(ThemeSelection::Custom(Box::new(CustomTheme {
+        name: name.to_string(),
+        base_preset,
+        theme,
+    })))
+}
+
+fn looks_like_theme_file(name: &str) -> bool {
+    name.ends_with(".toml") || name.contains('/') || name.contains('\\')
+}
+
+fn resolve_theme_file_selection(
+    name: &str,
+    theme_file_base_dir: Option<&Path>,
+) -> Result<ThemeSelection, String> {
+    let path = resolve_theme_file_path(name, theme_file_base_dir);
+    let content = std::fs::read_to_string(&path)
+        .map_err(|err| format!("Cannot read theme file \"{}\": {err}", path.display()))?;
+    let custom_config = toml::from_str::<CustomThemeConfig>(&content)
+        .map_err(|err| format!("Could not parse theme file \"{}\": {err}", path.display()))?;
+    let theme_name = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or(name);
+    custom_theme_selection(theme_name, &custom_config)
+}
+
+fn resolve_theme_file_path(name: &str, theme_file_base_dir: Option<&Path>) -> PathBuf {
+    let path = Path::new(name);
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    theme_file_base_dir
+        .map(|base_dir| base_dir.join(path))
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+pub(crate) fn validate_theme_syntax(
+    selection: &ThemeSelection,
+    themes: &ThemeSet,
+) -> Option<String> {
+    let syntax_theme_name = selection.syntax_theme_name();
+    (!themes.themes.contains_key(syntax_theme_name)).then(|| {
+        format!("Unknown syntax theme \"{syntax_theme_name}\", using default syntax colors")
+    })
 }
 
 pub(crate) fn theme_preset_label(preset: ThemePreset) -> &'static str {
@@ -451,24 +839,40 @@ pub(crate) fn theme_by_preset(preset: ThemePreset) -> &'static AppTheme {
     }
 }
 
+pub(crate) fn set_theme_selection(selection: ThemeSelection) {
+    *CURRENT_THEME.write().expect("theme state lock poisoned") = selection;
+}
+
+pub(crate) fn current_theme_selection() -> ThemeSelection {
+    CURRENT_THEME
+        .read()
+        .expect("theme state lock poisoned")
+        .clone()
+}
+
 pub(crate) fn set_theme_preset(preset: ThemePreset) {
-    CURRENT_PRESET.store(preset as u8, Ordering::Relaxed);
+    set_theme_selection(ThemeSelection::Preset(preset));
 }
 
+#[cfg(test)]
 pub(crate) fn current_theme_preset() -> ThemePreset {
-    match CURRENT_PRESET.load(Ordering::Relaxed) {
-        0 => ThemePreset::Arctic,
-        1 => ThemePreset::Forest,
-        2 => ThemePreset::OceanDark,
-        3 => ThemePreset::SolarizedDark,
-        _ => DEFAULT_PRESET,
-    }
+    current_theme_selection().preset_hint()
 }
 
-pub(crate) fn app_theme() -> &'static AppTheme {
-    theme_by_preset(current_theme_preset())
+pub(crate) fn app_theme() -> AppTheme {
+    current_theme_selection().app_theme()
 }
 
 pub(crate) fn current_syntect_theme(themes: &ThemeSet) -> &Theme {
-    &themes.themes[app_theme().syntax_theme_name]
+    let theme = app_theme();
+    themes
+        .themes
+        .get(theme.syntax_theme_name.as_ref())
+        .or_else(|| {
+            themes
+                .themes
+                .get(theme_by_preset(DEFAULT_PRESET).syntax_theme_name.as_ref())
+        })
+        .or_else(|| themes.themes.values().next())
+        .expect("syntect theme set is empty")
 }

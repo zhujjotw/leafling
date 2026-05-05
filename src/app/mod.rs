@@ -5,7 +5,7 @@ use crate::{
         toc::{should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry},
     },
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
-    theme::{current_syntect_theme, current_theme_preset, theme_preset_index},
+    theme::{current_syntect_theme, current_theme_selection, theme_preset_index},
 };
 use ratatui::{layout::Rect, text::Line};
 use std::{
@@ -235,8 +235,9 @@ impl App {
             picker_load_state: PickerLoadState::Idle,
             theme_picker: ThemePickerState {
                 open: false,
-                index: theme_preset_index(current_theme_preset()),
+                index: theme_preset_index(current_theme_selection().preset_hint()),
                 original: None,
+                original_preview: None,
                 preview_cache: vec![None; crate::theme::THEME_PRESETS.len()],
             },
             editor_picker: EditorPickerState {
@@ -761,7 +762,7 @@ impl App {
         }
 
         self.invalidate_theme_preview_cache();
-        self.store_theme_preview(current_theme_preset(), &new_lines, &new_toc);
+        self.store_current_theme_preview_from(&new_lines, &new_toc);
         self.replace_content(new_lines, new_toc);
         if !self.search.query.is_empty() && !self.search.mode {
             self.run_search();
@@ -801,7 +802,7 @@ impl App {
         self.search.mode = false;
         self.reset_search_state();
         self.invalidate_theme_preview_cache();
-        self.store_theme_preview(current_theme_preset(), &lines, &toc);
+        self.store_current_theme_preview_from(&lines, &toc);
         self.replace_content(lines, toc);
         true
     }

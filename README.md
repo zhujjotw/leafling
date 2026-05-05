@@ -130,7 +130,7 @@ cat TESTING.md | leaf
 
 ## Configuration
 
-Set default values for theme, editor, and watch mode via `config.toml`:
+Set default values for theme, editor, watch mode, and custom themes via `config.toml`:
 
 ```bash
 leaf --config
@@ -139,9 +139,28 @@ leaf --config
 This opens the configuration file in your editor. If the file does not exist yet, leaf creates it with documented defaults.
 
 ```toml
-theme = "ocean"      # arctic, forest, ocean, solarized-dark
+theme = "ocean"      # arctic, forest, ocean, solarized-dark, or a custom theme file
 editor = "nano"      # any editor in PATH
 watch = false        # auto-reload when opening a file
+
+# Optional custom theme file, resolved relative to config.toml:
+# theme = "gruvbox.toml"
+```
+
+Custom theme files can inherit from a built-in base and override only the colors you set:
+
+```toml
+# gruvbox.toml
+base = "ocean"
+syntax = "base16-ocean.dark"
+
+[ui]
+content_bg = "#282828"
+toc_accent = "#fe8019"
+
+[markdown]
+text = "#ebdbb2"
+heading_1 = "#fabd2f"
 ```
 
 All settings are optional. CLI arguments always take priority. See [`config.toml`](config.toml) for details.

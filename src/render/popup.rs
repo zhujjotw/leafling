@@ -195,7 +195,7 @@ pub(super) fn render_theme_popup(f: &mut Frame, app: &App) {
     ];
     for (idx, preset) in THEME_PRESETS.iter().enumerate() {
         let selected = idx == app.theme_picker_index();
-        let is_active = *preset == active;
+        let is_active = active == Some(*preset);
         let bg = if selected {
             theme.ui.toc_active_bg
         } else {
