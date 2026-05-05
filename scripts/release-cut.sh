@@ -178,6 +178,6 @@ PREV_TAG="$(
 
 git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "$VERSION"
-git tag "$TAG"
+git tag -m "$TAG" "$TAG"
 git push origin "HEAD:$BRANCH"
 git push origin "$TAG"

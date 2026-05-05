@@ -1,0 +1,83 @@
+name: CI Check
+
+on:
+  push:
+    branches:
+      - fix/**
+      - feat/**
+      - docs/**
+      - chore/**
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_BINSTALL: https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh
+
+jobs:
+  ci-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit message
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            SHA="$PR_SHA"
+          else
+            SHA="$PUSH_SHA"
+          fi
+
+          MSG=$(git log -1 --pretty=%s "$SHA")
+          echo "Commit message: $MSG"
+
+          if echo "$MSG" | grep -qE '^(Merge |[0-9]+\.[0-9]+\.[0-9]+$)'; then
+            echo "Skip: merge commit or version commit"
+            exit 0
+          fi
+
+          if echo "$MSG" | grep -qE '^(fix|chore|docs|feat): .+$'; then
+            echo "Valid commit message"
+          else
+            echo "::error::Invalid commit message: must be prefixed by fix:, chore:, docs: or feat:"
+            exit 1
+          fi
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: "true"
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Install cargo-audit
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf "$CARGO_BINSTALL" | bash
+          cargo binstall cargo-audit --no-confirm
+
+      - name: Audit dependencies
+        run: cargo audit
