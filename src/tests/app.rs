@@ -121,6 +121,28 @@ fn parse_cli_accepts_picker_with_watch() {
 }
 
 #[test]
+fn parse_cli_accepts_custom_theme_names() {
+    let args = vec![
+        "leaf".to_string(),
+        "--theme".to_string(),
+        "my-theme".to_string(),
+        "README.md".to_string(),
+    ];
+
+    let options = parse_cli(&args).unwrap();
+    assert_eq!(options.theme.as_deref(), Some("my-theme"));
+    assert_eq!(options.file_arg.as_deref(), Some("README.md"));
+}
+
+#[test]
+fn parse_cli_rejects_empty_theme_name() {
+    let args = vec!["leaf".to_string(), "--theme=".to_string()];
+
+    let err = parse_cli(&args).unwrap_err();
+    assert!(err.to_string().contains("Missing value for --theme"));
+}
+
+#[test]
 fn cancelling_search_clears_query_and_matches() {
     let (ss, theme) = test_assets();
     let (lines, toc) = parse_markdown("alpha\nbeta\nalpha beta\n", &ss, &theme);

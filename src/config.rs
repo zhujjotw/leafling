@@ -1,7 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context;
 use serde::Deserialize;
+
+use crate::theme::{resolve_theme_selection, CustomThemeConfig};
 
 const DEFAULT_CONFIG: &str = include_str!("../config.toml");
 
@@ -11,6 +16,9 @@ pub(crate) struct LeafConfig {
     pub(crate) theme: Option<String>,
     pub(crate) editor: Option<String>,
     pub(crate) watch: Option<bool>,
+    pub(crate) themes: BTreeMap<String, CustomThemeConfig>,
+    #[serde(skip)]
+    pub(crate) config_dir: Option<PathBuf>,
 }
 
 pub(crate) fn load_config() -> (LeafConfig, Option<String>) {
@@ -21,7 +29,7 @@ pub(crate) fn load_config() -> (LeafConfig, Option<String>) {
         Ok(c) => c,
         Err(_) => return (LeafConfig::default(), None),
     };
-    let config = match toml::from_str::<LeafConfig>(&content) {
+    let mut config = match toml::from_str::<LeafConfig>(&content) {
         Ok(c) => c,
         Err(_) => {
             return (
@@ -30,11 +38,14 @@ pub(crate) fn load_config() -> (LeafConfig, Option<String>) {
             );
         }
     };
-    let warning = config.theme.as_deref().and_then(|name| {
-        crate::theme::parse_theme_preset(name)
-            .is_none()
-            .then(|| format!("Unknown theme \"{name}\" in config, using default"))
-    });
+    config.config_dir = path.parent().map(Path::to_path_buf);
+    let warning = config
+        .theme
+        .as_deref()
+        .and_then(|name| {
+            resolve_theme_selection(name, &config.themes, config.config_dir.as_deref()).err()
+        })
+        .map(|message| format!("{message} in config, using default"));
     (config, warning)
 }
 

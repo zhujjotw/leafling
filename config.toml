@@ -11,9 +11,17 @@
 # Command-line arguments always take priority over this file.
 
 # Color theme
-# Available: arctic, forest, ocean, solarized-dark
+# Built-in themes: arctic, forest, ocean, solarized-dark
+# Or set this to a custom theme file path, relative to this config file.
 # Default: ocean
 theme = "ocean"
+
+# Custom theme files inherit from a built-in base and override only the colors
+# you set. To use one, set theme to its path:
+#
+# theme = "gruvbox.toml"
+#
+# Relative paths are resolved from this config file's directory.
 
 # Default editor for Ctrl+E
 # Any editor name available in PATH: nano, vim, nvim, micro,

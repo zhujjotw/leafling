@@ -305,7 +305,8 @@ impl TableBuf {
     }
 
     pub(crate) fn render(&self, render_width: usize) -> Vec<Line<'static>> {
-        let theme = &app_theme().markdown;
+        let app_theme = app_theme();
+        let theme = &app_theme.markdown;
         if self.rows.is_empty() {
             return vec![];
         }

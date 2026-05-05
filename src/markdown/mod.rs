@@ -101,7 +101,8 @@ pub(crate) fn hash_file_contents(path: &PathBuf) -> io::Result<u64> {
 }
 
 pub(crate) fn highlight_line<'a>(line: &Line<'a>) -> Line<'a> {
-    let theme = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme = &app_theme.markdown;
     Line::from(
         line.spans
             .iter()
@@ -249,7 +250,8 @@ fn highlight_code(
 }
 
 fn block_prefix(in_bq: bool) -> Vec<Span<'static>> {
-    let theme = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme = &app_theme.markdown;
     if in_bq {
         vec![Span::styled(
             "▏ ",
@@ -265,7 +267,8 @@ fn list_item_prefix(
     list_stack: &[ListKind],
     item_stack: &mut [ItemState],
 ) -> Vec<Span<'static>> {
-    let theme = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme = &app_theme.markdown;
     let mut prefix = block_prefix(in_bq);
     let Some(item) = item_stack.last_mut() else {
         return prefix;
@@ -1047,7 +1050,8 @@ pub(crate) fn parse_markdown_with_width(
     theme: &Theme,
     render_width: usize,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>) {
-    let theme_colors = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme_colors = &app_theme.markdown;
     let (src, fm_pairs) = frontmatter::extract_frontmatter(src);
     let mut lines: Vec<Line<'static>> = Vec::new();
 

@@ -1,7 +1,5 @@
 use anyhow::Result;
 
-use crate::theme::{parse_theme_preset, ThemePreset};
-
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct CliOptions {
     pub(crate) picker: bool,
@@ -12,7 +10,7 @@ pub(crate) struct CliOptions {
     pub(crate) print_help: bool,
     pub(crate) print_version: bool,
     pub(crate) file_arg: Option<String>,
-    pub(crate) theme: Option<ThemePreset>,
+    pub(crate) theme: Option<String>,
     pub(crate) editor: Option<String>,
 }
 
@@ -26,7 +24,7 @@ pub(crate) fn usage_text() -> &'static str {
      \x20 -h, --help                 Show this help message and exit\n\
      \x20 -V, --version              Show version information and exit\n\
      \x20 -w, --watch                Watch the file for changes and reload automatically\n\
-     \x20     --theme <PRESET>       Set color theme (arctic|forest|ocean|solarized-dark)\n\
+     \x20     --theme <NAME>         Set color theme preset or custom config theme\n\
      \x20 -e, --editor <NAME>        Set external editor (nano|vim|code|subl|emacs)\n\
      \x20     --picker               Open the file browser picker\n\
      \x20     --config               Open configuration file in editor\n\
@@ -72,17 +70,11 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
                 let Some(name) = iter.next() else {
                     anyhow::bail!("Missing value for --theme");
                 };
-                options.theme = Some(
-                    parse_theme_preset(name)
-                        .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?,
-                );
+                options.theme = Some(parse_theme_name(name)?);
             }
             _ if arg.starts_with("--theme=") => {
                 let name = &arg["--theme=".len()..];
-                options.theme = Some(
-                    parse_theme_preset(name)
-                        .ok_or_else(|| anyhow::anyhow!("Unknown theme: {name}"))?,
-                );
+                options.theme = Some(parse_theme_name(name)?);
             }
             "--editor" | "-e" => {
                 let Some(value) = iter.next() else {
@@ -134,4 +126,12 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
     }
 
     Ok(options)
+}
+
+fn parse_theme_name(name: &str) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        anyhow::bail!("Missing value for --theme");
+    }
+    Ok(name.to_string())
 }

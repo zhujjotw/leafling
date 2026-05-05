@@ -21,7 +21,9 @@ use cli::{parse_cli, print_usage, print_version, CliOptions};
 use markdown::{hash_str, parse_markdown, read_file_state};
 use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
-use theme::{current_syntect_theme, parse_theme_preset, set_theme_preset};
+use theme::{
+    current_syntect_theme, resolve_theme_selection, set_theme_selection, validate_theme_syntax,
+};
 use update::run_update;
 
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
@@ -43,7 +45,10 @@ pub(crate) use render::wrap_path_lines;
 #[cfg(test)]
 pub(crate) use runtime::should_handle_key;
 #[cfg(test)]
-pub(crate) use theme::{theme_preset_label, ThemePreset, THEME_PRESETS};
+pub(crate) use theme::{
+    app_theme, parse_theme_color, parse_theme_preset, theme_preset_label, CustomThemeConfig,
+    ThemePreset, ThemeSelection, THEME_PRESETS,
+};
 #[cfg(test)]
 pub(crate) use update::{
     asset_name_for_target, expected_asset_download_url, find_expected_checksum, is_newer_version,
@@ -67,6 +72,19 @@ fn read_stdin_limited<R: Read>(reader: &mut R, max_bytes: usize) -> Result<Strin
         );
     }
     String::from_utf8(buf).context("stdin is not valid UTF-8")
+}
+
+fn append_config_warning(warning: &mut Option<String>, next: Option<String>) {
+    let Some(next) = next else {
+        return;
+    };
+    match warning {
+        Some(existing) => {
+            existing.push_str("; ");
+            existing.push_str(&next);
+        }
+        None => *warning = Some(next),
+    }
 }
 
 fn main() -> Result<()> {
@@ -99,18 +117,27 @@ fn main() -> Result<()> {
         ..
     } = options;
 
-    let (user_config, config_warning) = config::load_config();
+    let (user_config, mut config_warning) = config::load_config();
 
-    let theme = cli_theme
-        .or_else(|| user_config.theme.as_deref().and_then(parse_theme_preset))
-        .unwrap_or_default();
+    let theme_selection = if let Some(theme_name) = cli_theme.as_deref() {
+        resolve_theme_selection(theme_name, &user_config.themes, None)
+            .map_err(|message| anyhow::anyhow!("{message}"))?
+    } else if let Some(theme_name) = user_config.theme.as_deref() {
+        resolve_theme_selection(
+            theme_name,
+            &user_config.themes,
+            user_config.config_dir.as_deref(),
+        )
+        .unwrap_or_default()
+    } else {
+        theme::ThemeSelection::default()
+    };
 
     let watch_from_config = user_config.watch.unwrap_or(false);
 
     let resolved_editor =
         editor::resolve_editor(cli_editor.as_deref(), user_config.editor.as_deref());
     runtime::debug_log(debug_input, &format!("main start args={args:?}"));
-    set_theme_preset(theme);
 
     if debug_input {
         let mut file = OpenOptions::new()
@@ -162,6 +189,11 @@ fn main() -> Result<()> {
 
     let ss = SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
+    append_config_warning(
+        &mut config_warning,
+        validate_theme_syntax(&theme_selection, &ts),
+    );
+    set_theme_selection(theme_selection);
     let theme = current_syntect_theme(&ts).clone();
     runtime::debug_log(
         debug_input,

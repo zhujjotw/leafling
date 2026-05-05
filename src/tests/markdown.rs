@@ -483,7 +483,8 @@ fn table_inline_code_has_code_style() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| `code` |\n";
     let (lines, _) = parse_markdown(md, &ss, &theme);
-    let theme_colors = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme_colors = &app_theme.markdown;
 
     let has_code_span = lines.iter().any(|line| {
         line.spans.iter().any(|span| {
@@ -501,7 +502,8 @@ fn table_inline_code_has_padding() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| `x` |\n";
     let (lines, _) = parse_markdown(md, &ss, &theme);
-    let theme_colors = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme_colors = &app_theme.markdown;
 
     let has_padded_span = lines.iter().any(|line| {
         line.spans
@@ -519,7 +521,8 @@ fn table_inline_math_renders_with_latex_style() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| $\\alpha$ |\n";
     let (lines, _) = parse_markdown(md, &ss, &theme);
-    let theme_colors = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme_colors = &app_theme.markdown;
 
     let has_math_span = lines.iter().any(|line| {
         line.spans.iter().any(|span| {
@@ -537,7 +540,8 @@ fn table_mixed_text_and_code_renders_both_styles() {
     let (ss, theme) = test_assets();
     let md = "| A |\n|---|\n| hello `world` bye |\n";
     let (lines, _) = parse_markdown(md, &ss, &theme);
-    let theme_colors = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme_colors = &app_theme.markdown;
 
     let table_line = lines
         .iter()
@@ -794,7 +798,8 @@ fn blockquote_bold_link_preserves_link_color() {
     let (ss, theme) = test_assets();
     let src = "> text [**lien bold**](https://rivolink.mg)\n";
     let (lines, _) = parse_markdown(src, &ss, &theme);
-    let theme_colors = &app_theme().markdown;
+    let app_theme = app_theme();
+    let theme_colors = &app_theme.markdown;
 
     let bq_line = &lines[0];
     let link_span = bq_line.spans.iter().find(|s| s.content.as_ref() == "lien");
