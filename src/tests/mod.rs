@@ -29,6 +29,10 @@ pub(super) fn test_assets() -> (SyntaxSet, Theme) {
     (ss, theme)
 }
 
+pub(super) fn test_md_theme() -> crate::theme::MarkdownTheme {
+    crate::theme::app_theme().markdown
+}
+
 pub(super) fn render_buffer(lines: &[Line<'static>]) -> ratatui::buffer::Buffer {
     let width = lines
         .iter()

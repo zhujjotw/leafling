@@ -5,7 +5,7 @@ use crate::{
         toc::{should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry},
     },
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
-    theme::{current_syntect_theme, current_theme_selection, theme_preset_index},
+    theme::{app_theme, current_syntect_theme, current_theme_selection, theme_preset_index},
 };
 use ratatui::{layout::Rect, text::Line};
 use std::{
@@ -377,7 +377,11 @@ impl App {
             .unwrap_or(true);
         if needs_refresh {
             let line = self.lines.get(line_idx)?;
-            self.highlighted_line_cache = Some((line_idx, crate::markdown::highlight_line(line)));
+            let theme = app_theme();
+            self.highlighted_line_cache = Some((
+                line_idx,
+                crate::markdown::highlight_line(line, &theme.markdown),
+            ));
         }
         Some(())
     }
@@ -751,9 +755,10 @@ impl App {
 
     pub(crate) fn reparse_source(&mut self, ss: &SyntaxSet, themes: &ThemeSet) {
         let theme = current_syntect_theme(themes);
+        let at = app_theme();
         let old_total = self.total();
         let (new_lines, new_toc) =
-            parse_markdown_with_width(&self.source, ss, theme, self.render_width);
+            parse_markdown_with_width(&self.source, ss, theme, self.render_width, &at.markdown);
         let new_total = new_lines.len();
 
         if old_total > 0 {
@@ -781,7 +786,9 @@ impl App {
         let file_state = read_file_state(&path);
         let content_hash = hash_str(&src);
         let theme = current_syntect_theme(themes);
-        let (lines, toc) = parse_markdown_with_width(&src, ss, theme, self.render_width);
+        let at = app_theme();
+        let (lines, toc) =
+            parse_markdown_with_width(&src, ss, theme, self.render_width, &at.markdown);
 
         let first_load = self.filepath.is_none();
         self.filename = filename;
