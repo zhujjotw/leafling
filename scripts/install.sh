@@ -113,16 +113,49 @@ if [ -z "$tag_name" ]; then
     exit 1
 fi
 
-download_url="https://github.com/$REPO/releases/download/$tag_name/$asset_name"
+current_version=""
+if [ -x "$DEST_BIN" ]; then
+    current_version="$("$DEST_BIN" --version 2>/dev/null | awk '{print $2}')" || true
+fi
+
+if [ -n "$current_version" ]; then
+    echo "Updating leaf..."
+else
+    echo "Installing leaf..."
+fi
+
+base_url="https://github.com/$REPO/releases/download/$tag_name"
 tmp_file="$(mktemp)"
-trap 'rm -f "$tmp_file"' EXIT
+tmp_checksums="$(mktemp)"
+trap 'rm -f "$tmp_file" "$tmp_checksums"' EXIT
 
 mkdir -p "$DEST_DIR"
-download_to "$download_url" "$tmp_file"
+download_to "$base_url/$asset_name" "$tmp_file"
+download_to "$base_url/checksums.txt" "$tmp_checksums"
+
+expected="$(grep "[[:space:]]${asset_name}$" "$tmp_checksums" | awk '{print $1}')"
+if [ -z "$expected" ]; then
+    echo "Asset $asset_name not found in checksums.txt" >&2
+    exit 1
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$tmp_file" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$tmp_file" | awk '{print $1}')"
+else
+    echo "Missing sha256sum or shasum. Try: npm install -g @rivolink/leaf" >&2
+    exit 1
+fi
+[ "$actual" = "$expected" ] || { echo "Checksum mismatch for $asset_name" >&2; exit 1; }
+
 cp "$tmp_file" "$DEST_BIN"
 chmod 755 "$DEST_BIN"
 
-echo "Installed leaf $tag_name to $DEST_BIN"
+if [ -n "$current_version" ]; then
+    echo "leaf updated from $current_version to ${tag_name#v}"
+else
+    echo "leaf ${tag_name#v} installed"
+fi
 case ":$PATH:" in
     *:"$DEST_DIR":*)
         ;;
