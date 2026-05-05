@@ -38,13 +38,40 @@ function Get-DownloadUrl {
     return "https://github.com/$Repo/releases/download/$Tag/$Asset"
 }
 
-function Install-Binary {
+function Download-Binary {
     param(
-        [string]$Url,
-        [string]$DestinationBin
+        [string]$Url
     )
 
-    Invoke-WebRequest -Uri $Url -OutFile $DestinationBin
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $tempFile
+        return $tempFile
+    } catch {
+        Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+        throw
+    }
+}
+
+function Verify-Checksum {
+    param(
+        [string]$File,
+        [string]$ChecksumsUrl,
+        [string]$AssetName
+    )
+    $checksums = Invoke-RestMethod -Uri $ChecksumsUrl
+    $escapedName = [regex]::Escape($AssetName)
+    $line = ($checksums -split "\r?\n") |
+        Where-Object { $_ -match "\s${escapedName}$" } |
+        Select-Object -First 1
+    if (-not $line) {
+        throw "Checksum not found for $AssetName"
+    }
+    $expected = ($line -split '\s+')[0]
+    $actual = (Get-FileHash -Path $File -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $expected) {
+        throw "Checksum mismatch!`nExpected: $expected`nGot:      $actual"
+    }
 }
 
 function Add-ToUserPath {
@@ -73,10 +100,33 @@ $destinationBin = Join-Path $destinationDir "leaf.exe"
 
 Ensure-InstallDir -Dir $destinationDir
 
+$currentVersion = $null
+if (Test-Path $destinationBin) {
+    try { $currentVersion = ((& $destinationBin --version 2>$null) -split ' ')[1] } catch {}
+}
+
+if ($currentVersion) {
+    Write-Info "Updating leaf..."
+} else {
+    Write-Info "Installing leaf..."
+}
+
 $tagName = Get-LatestTag -Repo $Repo
 $downloadUrl = Get-DownloadUrl -Repo $Repo -Tag $tagName -Asset $AssetName
 
-Install-Binary -Url $downloadUrl -DestinationBin $destinationBin
+$tempFile = Download-Binary -Url $downloadUrl
+try {
+    $checksumsUrl = Get-DownloadUrl -Repo $Repo -Tag $tagName -Asset "checksums.txt"
+    Verify-Checksum -File $tempFile -ChecksumsUrl $checksumsUrl -AssetName $AssetName
+    Copy-Item -Path $tempFile -Destination $destinationBin -Force
+} finally {
+    Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
+}
 Add-ToUserPath -Dir $destinationDir
 
-Write-Info "Installed leaf $tagName to $destinationBin"
+$newVersion = $tagName -replace '^v', ''
+if ($currentVersion) {
+    Write-Info "leaf updated from $currentVersion to $newVersion"
+} else {
+    Write-Info "leaf $newVersion installed"
+}
