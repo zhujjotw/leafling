@@ -20,6 +20,9 @@ theme = "ocean"
 # Custom theme example:
 # theme = "/path/to/custom-theme.toml"
 #
+# On Windows, use single quotes to avoid escaping backslashes:
+# theme = 'C:\path\to\custom-theme.toml'
+#
 # See gruvbox.toml in the repository for a complete example.
 
 # Default editor for Ctrl+E
