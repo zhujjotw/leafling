@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.19.0](https://github.com/RivoLink/leaf/releases/tag/1.19.0)] - 2026-05-06
+
+### Docs
+
+- custom theme support ([#83](https://github.com/RivoLink/leaf/pull/83))
+
+### Added
+
+- add custom theme support ([#80](https://github.com/RivoLink/leaf/pull/80))
+
+### Fixed
+
+- verify SHA-256 checksum before installing binary ([#87](https://github.com/RivoLink/leaf/pull/87))
+- cargo audit ci install ([#81](https://github.com/RivoLink/leaf/pull/81))
+
+### Changed
+
+- normalize nested code fences ([#86](https://github.com/RivoLink/leaf/pull/86))
+- reduce theme RwLock reads ([#82](https://github.com/RivoLink/leaf/pull/82))
+- ci workflow and gpg signing ([#78](https://github.com/RivoLink/leaf/pull/78))
+
 ## [[1.18.2](https://github.com/RivoLink/leaf/releases/tag/1.18.2)] - 2026-05-03
 
 ### Fixed
