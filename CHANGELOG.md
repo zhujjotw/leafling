@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.19.1](https://github.com/RivoLink/leaf/releases/tag/1.19.1)] - 2026-05-06
+
+### Docs
+
+- windows path tip for config ([#93](https://github.com/RivoLink/leaf/pull/93))
+- update contributors image link ([#92](https://github.com/RivoLink/leaf/pull/92))
+
 ## [[1.19.0](https://github.com/RivoLink/leaf/releases/tag/1.19.0)] - 2026-05-06
 
 ### Docs
