@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.20.0](https://github.com/RivoLink/leaf/releases/tag/1.20.0)] - 2026-05-07
+
+### Added
+
+- clickable links with hover effect ([#96](https://github.com/RivoLink/leaf/pull/96))
+
+### Fixed
+
+- link marker overlap ([#97](https://github.com/RivoLink/leaf/pull/97))
+
+### Changed
+
+- improve search results ux ([#100](https://github.com/RivoLink/leaf/pull/100))
+
 ## [[1.19.1](https://github.com/RivoLink/leaf/releases/tag/1.19.1)] - 2026-05-06
 
 ### Docs
