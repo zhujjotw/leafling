@@ -75,6 +75,7 @@ pub(crate) struct UiTheme {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct MarkdownTheme {
     pub(crate) search_highlight_bg: Color,
+    pub(crate) search_match_bg: Color,
     pub(crate) code_gutter: Color,
     pub(crate) blockquote_marker: Color,
     pub(crate) list_level_1: Color,
@@ -185,6 +186,7 @@ const BASE_DARK_UI: UiTheme = UiTheme {
 
 const BASE_LIGHT_MARKDOWN: MarkdownTheme = MarkdownTheme {
     search_highlight_bg: Color::Rgb(232, 223, 164),
+    search_match_bg: Color::Rgb(255, 210, 70),
     code_gutter: Color::Rgb(132, 148, 164),
     blockquote_marker: Color::Rgb(124, 134, 184),
     list_level_1: Color::Rgb(48, 140, 98),
@@ -223,6 +225,7 @@ const BASE_LIGHT_MARKDOWN: MarkdownTheme = MarkdownTheme {
 
 const BASE_DARK_MARKDOWN: MarkdownTheme = MarkdownTheme {
     search_highlight_bg: Color::Rgb(72, 62, 16),
+    search_match_bg: Color::Rgb(140, 120, 30),
     code_gutter: Color::Rgb(40, 48, 68),
     blockquote_marker: Color::Rgb(75, 80, 148),
     list_level_1: Color::Rgb(95, 200, 148),
@@ -304,6 +307,7 @@ pub(crate) const FOREST_THEME: AppTheme = AppTheme {
     },
     markdown: MarkdownTheme {
         search_highlight_bg: Color::Rgb(74, 78, 32),
+        search_match_bg: Color::Rgb(148, 156, 60),
         code_gutter: Color::Rgb(50, 66, 60),
         blockquote_marker: Color::Rgb(98, 124, 118),
         list_level_1: Color::Rgb(120, 198, 148),
@@ -386,6 +390,7 @@ pub(crate) const SOLARIZED_DARK_THEME: AppTheme = AppTheme {
     },
     markdown: MarkdownTheme {
         search_highlight_bg: Color::Rgb(92, 74, 22),
+        search_match_bg: Color::Rgb(180, 148, 40),
         code_gutter: Color::Rgb(88, 110, 117),
         blockquote_marker: Color::Rgb(108, 113, 196),
         list_level_1: Color::Rgb(133, 153, 0),
@@ -602,6 +607,7 @@ theme_overrides!(UiThemeOverrides for UiTheme {
 
 theme_overrides!(MarkdownThemeOverrides for MarkdownTheme {
     search_highlight_bg,
+    search_match_bg,
     code_gutter,
     blockquote_marker,
     list_level_1,

@@ -1,7 +1,11 @@
 use super::{rendered_non_empty_lines, test_assets, test_md_theme};
-use crate::markdown::{parse_markdown, parse_markdown_with_width, resolve_syntax};
+use crate::markdown::{highlight_line, parse_markdown, parse_markdown_with_width, resolve_syntax};
 use crate::theme::app_theme;
 use crate::*;
+use ratatui::{
+    style::Style,
+    text::{Line, Span},
+};
 use syntect::parsing::SyntaxSet;
 
 #[test]
@@ -944,4 +948,95 @@ fn link_spans_in_table_are_detected() {
         urls.contains(&"https://example.com/table"),
         "table link missing: {urls:?}"
     );
+}
+
+#[test]
+fn highlight_line_single_match() {
+    let theme = test_md_theme();
+    let line_bg = theme.search_highlight_bg;
+    let match_bg = theme.search_match_bg;
+    let line = Line::from(vec![Span::raw("hello world")]);
+    let result = highlight_line(&line, &theme, "world");
+    assert_eq!(result.spans.len(), 2);
+    assert_eq!(result.spans[0].content.as_ref(), "hello ");
+    assert_eq!(result.spans[0].style.bg, Some(line_bg));
+    assert_eq!(result.spans[1].content.as_ref(), "world");
+    assert_eq!(result.spans[1].style.bg, Some(match_bg));
+    assert!(result.spans[1]
+        .style
+        .add_modifier
+        .contains(ratatui::style::Modifier::BOLD));
+}
+
+#[test]
+fn highlight_line_multiple_matches() {
+    let theme = test_md_theme();
+    let match_bg = theme.search_match_bg;
+    let line = Line::from(vec![Span::raw("abcabcabc")]);
+    let result = highlight_line(&line, &theme, "abc");
+    assert_eq!(result.spans.len(), 3);
+    for span in &result.spans {
+        assert_eq!(span.content.as_ref(), "abc");
+        assert_eq!(span.style.bg, Some(match_bg));
+        assert!(span
+            .style
+            .add_modifier
+            .contains(ratatui::style::Modifier::BOLD));
+    }
+}
+
+#[test]
+fn highlight_line_case_insensitive() {
+    let theme = test_md_theme();
+    let line_bg = theme.search_highlight_bg;
+    let match_bg = theme.search_match_bg;
+    let line = Line::from(vec![Span::raw("Hello World")]);
+    let result = highlight_line(&line, &theme, "hello");
+    assert_eq!(result.spans.len(), 2);
+    assert_eq!(result.spans[0].content.as_ref(), "Hello");
+    assert_eq!(result.spans[0].style.bg, Some(match_bg));
+    assert!(result.spans[0]
+        .style
+        .add_modifier
+        .contains(ratatui::style::Modifier::BOLD));
+    assert_eq!(result.spans[1].content.as_ref(), " World");
+    assert_eq!(result.spans[1].style.bg, Some(line_bg));
+    assert!(!result.spans[1]
+        .style
+        .add_modifier
+        .contains(ratatui::style::Modifier::BOLD));
+}
+
+#[test]
+fn highlight_line_cross_span() {
+    let theme = test_md_theme();
+    let line_bg = theme.search_highlight_bg;
+    let match_bg = theme.search_match_bg;
+    let bold = Style::default().add_modifier(ratatui::style::Modifier::BOLD);
+    let line = Line::from(vec![Span::styled("hel", bold), Span::raw("lo world")]);
+    let result = highlight_line(&line, &theme, "hello");
+    assert_eq!(result.spans[0].content.as_ref(), "hel");
+    assert_eq!(result.spans[0].style.bg, Some(match_bg));
+    assert!(result.spans[0]
+        .style
+        .add_modifier
+        .contains(ratatui::style::Modifier::BOLD));
+    assert_eq!(result.spans[1].content.as_ref(), "lo");
+    assert_eq!(result.spans[1].style.bg, Some(match_bg));
+    assert!(result.spans[1]
+        .style
+        .add_modifier
+        .contains(ratatui::style::Modifier::BOLD));
+    assert_eq!(result.spans[2].content.as_ref(), " world");
+    assert_eq!(result.spans[2].style.bg, Some(line_bg));
+}
+
+#[test]
+fn highlight_line_no_match_returns_clone() {
+    let theme = test_md_theme();
+    let line = Line::from(vec![Span::raw("hello world")]);
+    let result = highlight_line(&line, &theme, "xyz");
+    assert_eq!(result.spans.len(), 1);
+    assert_eq!(result.spans[0].content.as_ref(), "hello world");
+    assert_eq!(result.spans[0].style.bg, None);
 }

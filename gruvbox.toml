@@ -38,6 +38,7 @@ toc_secondary_text_inactive = "#928374"
 
 [markdown]
 search_highlight_bg = "#665c54"
+search_match_bg = "#fabd2f"
 code_gutter = "#665c54"
 blockquote_marker = "#928374"
 list_level_1 = "#b8bb26"
