@@ -672,7 +672,7 @@ fn align_cell(
                     .fg(theme.link_icon)
                     .add_modifier(inline.modifiers());
                 spans.push(Span::styled(super::LINK_MARKER, style));
-                content_width += 1;
+                content_width += display_width(super::LINK_MARKER);
             }
             CellFragment::Code(_, _) | CellFragment::InlineMath(_, _) => {
                 let styled = format!(" {} ", frag.rendered_text());

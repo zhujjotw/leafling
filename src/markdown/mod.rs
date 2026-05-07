@@ -48,7 +48,7 @@ struct ItemState {
     continuation_indent: usize,
 }
 
-const LINK_MARKER: &str = "⌗";
+const LINK_MARKER: &str = "#";
 
 pub(crate) struct LinkSpan {
     pub line_idx: usize,
