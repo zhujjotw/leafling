@@ -26,10 +26,20 @@ fn is_code_gutter_span(content: &str) -> bool {
 }
 
 pub(crate) fn line_searchable_text(line: &Line<'_>) -> String {
+    use super::LINK_MARKER;
+
+    fn collect_filtered(spans: &[ratatui::text::Span<'_>]) -> String {
+        spans
+            .iter()
+            .filter(|s| s.content.as_ref() != LINK_MARKER)
+            .map(|s| s.content.as_ref())
+            .collect()
+    }
+
     let spans = &line.spans;
     let has_pipe = spans.iter().take(4).any(|s| s.content.contains('│'));
     if !has_pipe {
-        return line_plain_text(line);
+        return collect_filtered(spans);
     }
     let mut gutter_end = None;
     for (i, span) in spans.iter().enumerate() {
@@ -39,7 +49,7 @@ pub(crate) fn line_searchable_text(line: &Line<'_>) -> String {
         }
     }
     let Some(ge) = gutter_end else {
-        return line_plain_text(line);
+        return collect_filtered(spans);
     };
     let last = spans.len().saturating_sub(1);
     let start = ge + 1;
@@ -51,10 +61,7 @@ pub(crate) fn line_searchable_text(line: &Line<'_>) -> String {
     } else {
         spans.len()
     };
-    spans[start..end]
-        .iter()
-        .map(|s| s.content.as_ref())
-        .collect()
+    collect_filtered(&spans[start..end])
 }
 
 pub(crate) fn build_searchable_lines(lines: &[Line<'_>]) -> Vec<String> {
