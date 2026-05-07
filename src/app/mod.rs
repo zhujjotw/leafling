@@ -120,7 +120,7 @@ pub(crate) struct App {
     pub(super) last_content_hash: u64,
     pub(super) last_hash_check: Option<Instant>,
     pub(super) reload_flash: Option<Instant>,
-    highlighted_line_cache: Option<(usize, Line<'static>)>,
+    highlighted_line_cache: Option<(usize, u64, Line<'static>)>,
     toc_display_lines: Vec<Line<'static>>,
     toc_header_line: Line<'static>,
     toc_active_idx: Option<usize>,
@@ -326,8 +326,10 @@ impl App {
         &self.lines[start..end]
     }
 
-    pub(crate) fn highlighted_line_cache(&self) -> Option<&(usize, Line<'static>)> {
-        self.highlighted_line_cache.as_ref()
+    pub(crate) fn highlighted_line_cache(&self) -> Option<(usize, &Line<'static>)> {
+        self.highlighted_line_cache
+            .as_ref()
+            .map(|(idx, _, line)| (*idx, line))
     }
 
     pub(crate) fn toc_display_lines(&self) -> &[Line<'static>] {
@@ -398,17 +400,19 @@ impl App {
     }
 
     pub(crate) fn refresh_highlighted_line_cache(&mut self, line_idx: usize) -> Option<()> {
+        let qh = self.search.query_hash;
         let needs_refresh = self
             .highlighted_line_cache
             .as_ref()
-            .map(|(cached_idx, _)| *cached_idx != line_idx)
+            .map(|(idx, hash, _)| *idx != line_idx || *hash != qh)
             .unwrap_or(true);
         if needs_refresh {
             let line = self.lines.get(line_idx)?;
             let theme = app_theme();
             self.highlighted_line_cache = Some((
                 line_idx,
-                crate::markdown::highlight_line(line, &theme.markdown),
+                qh,
+                crate::markdown::highlight_line(line, &theme.markdown, &self.search.query),
             ));
         }
         Some(())

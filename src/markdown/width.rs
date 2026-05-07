@@ -7,7 +7,7 @@ pub(crate) fn line_plain_text(line: &Line<'_>) -> String {
     line.spans.iter().map(|s| s.content.as_ref()).collect()
 }
 
-fn is_code_gutter_span(content: &str) -> bool {
+pub(super) fn is_code_gutter_span(content: &str) -> bool {
     let inner = content.strip_prefix('│').and_then(|s| s.strip_suffix('│'));
     match inner {
         Some(s) if !s.is_empty() => {
