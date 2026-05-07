@@ -1,10 +1,13 @@
 use crate::{
-    app::{App, EditorFlash, FileChange, WatchFlash, FLASH_DURATION_MS},
+    app::{App, EditorFlash, FileChange, LinkFlash, WatchFlash, FLASH_DURATION_MS},
+    clipboard::{copy_to_clipboard, open_url},
     editor::{self, classify, open_in_editor, split_editor_cmd, EditorResult},
     render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
 use anyhow::Result;
-use crossterm::event::{self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
+use crossterm::event::{
+    self, poll, Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+};
 use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::{
     fs::OpenOptions,
@@ -102,6 +105,9 @@ pub(crate) fn run(
         let config_flash_timeout = app
             .config_flash()
             .and_then(|(_, started)| CONFIG_FLASH_DURATION.checked_sub(started.elapsed()));
+        let link_flash_timeout = app
+            .link_flash()
+            .and_then(|(_, started)| LINK_FLASH_DURATION.checked_sub(started.elapsed()));
         let resize_timeout =
             pending_resize.and_then(|started| RESIZE_DEBOUNCE.checked_sub(started.elapsed()));
         let poll_timeout = [
@@ -119,6 +125,7 @@ pub(crate) fn run(
             editor_flash_timeout,
             watch_flash_timeout,
             config_flash_timeout,
+            link_flash_timeout,
             resize_timeout,
         ]
         .into_iter()
@@ -429,6 +436,15 @@ pub(crate) fn run(
                     }
                 }
                 Event::Mouse(mouse) => {
+                    if app.debug_input_enabled() {
+                        debug_log(
+                            true,
+                            &format!(
+                                "mouse_event kind={:?} col={} row={} modifiers={:?}",
+                                mouse.kind, mouse.column, mouse.row, mouse.modifiers
+                            ),
+                        );
+                    }
                     let prev_pos = app.mouse_position;
                     app.mouse_position = (mouse.column, mouse.row);
                     let state_changed = if app.is_popup_open() {
@@ -440,13 +456,88 @@ pub(crate) fn run(
                         match mouse.kind {
                             MouseEventKind::ScrollUp => {
                                 app.scroll_up(MOUSE_SCROLL_STEP);
+                                app.hovered_link = None;
                                 true
                             }
                             MouseEventKind::ScrollDown => {
                                 app.scroll_down(MOUSE_SCROLL_STEP);
+                                app.hovered_link = None;
                                 true
                             }
-                            MouseEventKind::Down(..)
+                            MouseEventKind::Down(MouseButton::Left) => {
+                                let now = Instant::now();
+                                let is_double_click = app
+                                    .last_click
+                                    .map(|(c, r, t)| {
+                                        c == mouse.column
+                                            && r == mouse.row
+                                            && t.elapsed() < DOUBLE_CLICK_THRESHOLD
+                                    })
+                                    .unwrap_or(false);
+                                app.last_click = Some((mouse.column, mouse.row, now));
+
+                                let link_hit = app.link_at_position(
+                                    mouse.column,
+                                    mouse.row,
+                                    CONTENT_HORIZONTAL_PADDING,
+                                    SCROLLBAR_WIDTH,
+                                );
+                                if app.debug_input_enabled() {
+                                    debug_log(
+                                        true,
+                                        &format!(
+                                            "left_click link_hit={} dbl={} modifiers={:?}",
+                                            link_hit.is_some(),
+                                            is_double_click,
+                                            mouse.modifiers,
+                                        ),
+                                    );
+                                }
+                                if let Some(link) = link_hit {
+                                    let is_internal = link.url.starts_with('#');
+                                    if mouse.modifiers.contains(KeyModifiers::CONTROL) {
+                                        if is_internal {
+                                            if let Some(path) = app.filepath() {
+                                                let p = path.to_path_buf();
+                                                std::thread::spawn(move || {
+                                                    open_url(&p.display().to_string());
+                                                });
+                                            }
+                                        } else {
+                                            let url = link.url.clone();
+                                            std::thread::spawn(move || {
+                                                open_url(&url);
+                                            });
+                                        }
+                                        true
+                                    } else if is_double_click
+                                        || mouse.modifiers.contains(KeyModifiers::ALT)
+                                    {
+                                        let text = if is_internal {
+                                            app.filename().to_string()
+                                        } else {
+                                            link.url.clone()
+                                        };
+                                        if copy_to_clipboard(&text) {
+                                            app.set_link_flash(LinkFlash::Copied);
+                                        } else {
+                                            app.set_link_flash(LinkFlash::CopyFailed);
+                                        }
+                                        app.last_click = None;
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                } else if is_on_scrollbar(app.content_area, mouse.column, mouse.row)
+                                {
+                                    app.scrollbar_dragging = true;
+                                    scrollbar_scroll_to(app, mouse.row);
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            MouseEventKind::Down(MouseButton::Middle | MouseButton::Right)
                                 if is_on_scrollbar(app.content_area, mouse.column, mouse.row) =>
                             {
                                 app.scrollbar_dragging = true;
@@ -464,8 +555,21 @@ pub(crate) fn run(
                             MouseEventKind::Moved if prev_pos != app.mouse_position => {
                                 let area = app.content_area;
                                 let (prev_col, prev_row) = prev_pos;
-                                is_on_scrollbar(area, prev_col, prev_row)
-                                    || is_on_scrollbar(area, mouse.column, mouse.row)
+                                let scrollbar_changed = is_on_scrollbar(area, prev_col, prev_row)
+                                    || is_on_scrollbar(area, mouse.column, mouse.row);
+
+                                let new_hover = app.find_hovered_link(
+                                    mouse.column,
+                                    mouse.row,
+                                    CONTENT_HORIZONTAL_PADDING,
+                                    SCROLLBAR_WIDTH,
+                                );
+                                let hover_changed = app.hovered_link != new_hover;
+                                if hover_changed {
+                                    app.hovered_link = new_hover;
+                                }
+
+                                scrollbar_changed || hover_changed
                             }
                             _ => false,
                         }
@@ -539,6 +643,13 @@ pub(crate) fn run(
                 needs_redraw = true;
             }
         }
+
+        if let Some((_, started)) = app.link_flash() {
+            if started.elapsed() >= LINK_FLASH_DURATION {
+                app.clear_link_flash();
+                needs_redraw = true;
+            }
+        }
     }
     Ok(())
 }
@@ -546,6 +657,8 @@ pub(crate) fn run(
 const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 const WATCH_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 const CONFIG_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
+const LINK_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
+const DOUBLE_CLICK_THRESHOLD: Duration = Duration::from_millis(400);
 
 fn strip_unc_prefix(path: std::path::PathBuf) -> std::path::PathBuf {
     if cfg!(target_os = "windows") {

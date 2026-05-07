@@ -87,6 +87,7 @@ pub(super) fn handle_table_event(
     ev: &MdEvent<'_>,
     lines: &mut Vec<Line<'static>>,
     render_width: usize,
+    link_urls: &mut Vec<String>,
 ) -> bool {
     let Some(tb) = table.as_mut() else {
         return false;
@@ -156,9 +157,10 @@ pub(super) fn handle_table_event(
             tb.inline_style.strikethrough = false;
             true
         }
-        MdEvent::Start(Tag::Link { .. }) => {
+        MdEvent::Start(Tag::Link { dest_url, .. }) => {
             tb.inline_style.link = true;
             tb.push_link_marker();
+            link_urls.push(dest_url.to_string());
             true
         }
         MdEvent::End(TagEnd::Link) => {

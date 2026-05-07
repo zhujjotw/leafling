@@ -7,7 +7,7 @@ use ratatui::style::Style;
 fn code_block_box_renders_right_border_in_one_column() {
     let (ss, theme) = test_assets();
     let md = "```ts\nconst city = \"東京\";\n\tconsole.log(city)\n```";
-    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
+    let (lines, _, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let buffer = render_buffer(&lines);
 
     let (right_x, start_y) = find_symbol(&buffer, "┐").unwrap();
@@ -26,7 +26,7 @@ fn code_block_box_renders_right_border_in_one_column() {
 fn table_render_right_border_stays_aligned() {
     let (ss, theme) = test_assets();
     let md = "| Name | Value |\n| --- | --- |\n| 東京 | 12 |\n| tab\tcell | ok |";
-    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
+    let (lines, _, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let buffer = render_buffer(&lines);
 
     let (right_x, start_y) = find_symbol(&buffer, "┐").unwrap();
@@ -45,7 +45,7 @@ fn table_render_right_border_stays_aligned() {
 fn table_render_right_border_stays_aligned_with_emoji_cells() {
     let (ss, theme) = test_assets();
     let md = "| Critère | Note |\n| --- | --- |\n| Tests | ✅ Bonne couverture |\n| Sécurité | ⚠ Quelques points |\n";
-    let (lines, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
+    let (lines, _, _) = parse_markdown(md, &ss, &theme, &test_md_theme());
     let buffer = render_buffer(&lines);
 
     let (right_x, start_y) = find_symbol(&buffer, "┐").unwrap();

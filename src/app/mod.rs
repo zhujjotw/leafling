@@ -1,14 +1,16 @@
 use crate::{
     markdown::{
-        build_searchable_lines, hash_file_contents, hash_str, parse_markdown_with_width,
-        read_file_state,
+        build_searchable_lines, display_width, hash_file_contents, hash_str,
+        parse_markdown_with_width, read_file_state,
         toc::{should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry},
+        LinkSpan,
     },
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
     theme::{app_theme, current_syntect_theme, current_theme_selection, theme_preset_index},
 };
 use ratatui::{layout::Rect, text::Line};
 use std::{
+    collections::HashMap,
     path::PathBuf,
     time::{Duration, Instant, SystemTime},
 };
@@ -39,6 +41,12 @@ pub(crate) enum WatchFlash {
     NoFile,
     FileNotFound,
     NotActive,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LinkFlash {
+    Copied,
+    CopyFailed,
 }
 
 pub(super) mod theme_picker;
@@ -82,6 +90,7 @@ pub(crate) struct StatusCacheKey {
     watch_flash_active: bool,
     watch_error: bool,
     config_flash_active: bool,
+    link_flash_active: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -132,6 +141,10 @@ pub(crate) struct App {
     pub(super) editor_flash: Option<(EditorFlash, Instant)>,
     watch_flash: Option<(WatchFlash, Instant)>,
     config_flash: Option<(String, Instant)>,
+    pub(crate) link_spans_by_line: HashMap<usize, Vec<LinkSpan>>,
+    pub(crate) hovered_link: Option<(usize, usize)>,
+    link_flash: Option<(LinkFlash, Instant)>,
+    pub(crate) last_click: Option<(u16, u16, Instant)>,
 }
 
 impl App {
@@ -253,10 +266,18 @@ impl App {
             editor_flash: None,
             watch_flash: None,
             config_flash: None,
+            link_spans_by_line: HashMap::new(),
+            hovered_link: None,
+            link_flash: None,
+            last_click: None,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
         app
+    }
+
+    pub(crate) fn set_link_spans(&mut self, link_spans: Vec<LinkSpan>) {
+        self.link_spans_by_line = link_spans_to_map(link_spans);
     }
 
     pub(crate) fn set_last_content_hash(&mut self, last_content_hash: u64) {
@@ -325,7 +346,12 @@ impl App {
         &self.filename
     }
 
-    pub(crate) fn replace_content(&mut self, lines: Vec<Line<'static>>, toc: Vec<TocEntry>) {
+    pub(crate) fn replace_content(
+        &mut self,
+        lines: Vec<Line<'static>>,
+        toc: Vec<TocEntry>,
+        link_spans: Vec<LinkSpan>,
+    ) {
         self.plain_lines = build_searchable_lines(&lines)
             .into_iter()
             .map(|line| line.to_lowercase())
@@ -334,6 +360,8 @@ impl App {
         self.toc = toc;
         self.highlighted_line_cache = None;
         self.toc_header_line = toc_header_line();
+        self.link_spans_by_line = link_spans_to_map(link_spans);
+        self.hovered_link = None;
         self.refresh_static_caches();
     }
 
@@ -447,6 +475,11 @@ impl App {
             watch_error: self.watch_error,
             config_flash_active: self
                 .config_flash
+                .as_ref()
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
+                .unwrap_or(false),
+            link_flash_active: self
+                .link_flash
                 .as_ref()
                 .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
                 .unwrap_or(false),
@@ -591,6 +624,91 @@ impl App {
 
     pub(crate) fn clear_config_flash(&mut self) {
         self.config_flash = None;
+    }
+
+    pub(crate) fn set_link_flash(&mut self, flash: LinkFlash) {
+        self.link_flash = Some((flash, Instant::now()));
+    }
+
+    pub(crate) fn link_flash(&self) -> Option<(&LinkFlash, &Instant)> {
+        self.link_flash.as_ref().map(|(f, t)| (f, t))
+    }
+
+    pub(crate) fn clear_link_flash(&mut self) {
+        self.link_flash = None;
+    }
+
+    pub(crate) fn link_at_position(
+        &self,
+        col: u16,
+        row: u16,
+        padding: u16,
+        sb_width: u16,
+    ) -> Option<&LinkSpan> {
+        self.find_hovered_link(col, row, padding, sb_width)
+            .and_then(|(line_idx, span_idx)| {
+                self.link_spans_by_line
+                    .get(&line_idx)
+                    .and_then(|spans| spans.get(span_idx))
+            })
+    }
+
+    pub(crate) fn find_hovered_link(
+        &self,
+        col: u16,
+        row: u16,
+        padding: u16,
+        sb_width: u16,
+    ) -> Option<(usize, usize)> {
+        let area = self.content_area;
+        let inner_x = area.x + padding;
+        let inner_w = area
+            .width
+            .saturating_sub(padding * 2)
+            .saturating_sub(sb_width);
+
+        if col < inner_x || col >= inner_x + inner_w || row < area.y || row >= area.y + area.height
+        {
+            return None;
+        }
+
+        let rel_col = (col - inner_x) as usize;
+        let rel_row = (row - area.y) as usize;
+        let content_width = inner_w.max(1) as usize;
+
+        let mut visual_row = 0usize;
+        for line_idx in self.scroll..self.total() {
+            let line = &self.lines[line_idx];
+            let line_width: usize = line
+                .spans
+                .iter()
+                .map(|s| display_width(s.content.as_ref()))
+                .sum();
+            let wrapped_lines = if line_width == 0 {
+                1
+            } else {
+                line_width.div_ceil(content_width)
+            };
+
+            if rel_row < visual_row + wrapped_lines {
+                let row_in_wrap = rel_row - visual_row;
+                let char_col = row_in_wrap * content_width + rel_col;
+                if let Some(spans) = self.link_spans_by_line.get(&line_idx) {
+                    if let Some(idx) = spans
+                        .iter()
+                        .position(|ls| char_col >= ls.start_col && char_col < ls.end_col)
+                    {
+                        return Some((line_idx, idx));
+                    }
+                }
+                return None;
+            }
+            visual_row += wrapped_lines;
+            if visual_row > area.height as usize {
+                break;
+            }
+        }
+        None
     }
 
     pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
@@ -757,7 +875,7 @@ impl App {
         let theme = current_syntect_theme(themes);
         let at = app_theme();
         let old_total = self.total();
-        let (new_lines, new_toc) =
+        let (new_lines, new_toc, link_spans) =
             parse_markdown_with_width(&self.source, ss, theme, self.render_width, &at.markdown);
         let new_total = new_lines.len();
 
@@ -768,7 +886,7 @@ impl App {
 
         self.invalidate_theme_preview_cache();
         self.store_current_theme_preview_from(&new_lines, &new_toc);
-        self.replace_content(new_lines, new_toc);
+        self.replace_content(new_lines, new_toc, link_spans);
         if !self.search.query.is_empty() && !self.search.mode {
             self.run_search();
         }
@@ -787,7 +905,7 @@ impl App {
         let content_hash = hash_str(&src);
         let theme = current_syntect_theme(themes);
         let at = app_theme();
-        let (lines, toc) =
+        let (lines, toc, link_spans) =
             parse_markdown_with_width(&src, ss, theme, self.render_width, &at.markdown);
 
         let first_load = self.filepath.is_none();
@@ -810,7 +928,7 @@ impl App {
         self.reset_search_state();
         self.invalidate_theme_preview_cache();
         self.store_current_theme_preview_from(&lines, &toc);
-        self.replace_content(lines, toc);
+        self.replace_content(lines, toc, link_spans);
         true
     }
 
@@ -836,4 +954,12 @@ impl App {
         }
         true
     }
+}
+
+fn link_spans_to_map(link_spans: Vec<LinkSpan>) -> HashMap<usize, Vec<LinkSpan>> {
+    let mut map: HashMap<usize, Vec<LinkSpan>> = HashMap::new();
+    for span in link_spans {
+        map.entry(span.line_idx).or_default().push(span);
+    }
+    map
 }
