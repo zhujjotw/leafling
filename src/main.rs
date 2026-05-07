@@ -5,6 +5,7 @@ use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
 mod app;
 mod cli;
+mod clipboard;
 mod config;
 mod editor;
 mod markdown;
@@ -213,7 +214,7 @@ fn main() -> Result<()> {
     let last_content_hash = hash_str(&src);
 
     let at = app_theme();
-    let (lines, toc) = parse_markdown(&src, &ss, &theme, &at.markdown);
+    let (lines, toc, link_spans) = parse_markdown(&src, &ss, &theme, &at.markdown);
     let mut app = App::new_with_source(
         lines,
         toc,
@@ -226,6 +227,7 @@ fn main() -> Result<()> {
             last_file_state,
         },
     );
+    app.set_link_spans(link_spans);
     app.set_last_content_hash(last_content_hash);
     app.set_watch_from_config(watch_from_config);
     app.set_editor_config(Some(resolved_editor));

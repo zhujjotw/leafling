@@ -1,7 +1,7 @@
-use crate::{app::App, theme::app_theme};
+use crate::{app::App, markdown::display_width, theme::app_theme};
 use ratatui::{
     layout::Rect,
-    style::Style,
+    style::{Color, Style},
     widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
@@ -33,6 +33,24 @@ pub(super) fn render_content_panel(
         if (scroll..visible_end).contains(&line_idx) {
             if let Some((_, highlighted_line)) = app.highlighted_line_cache() {
                 visible_lines[line_idx - scroll] = highlighted_line.clone();
+            }
+        }
+    }
+
+    if let Some((hover_line, span_index)) = app.hovered_link {
+        if (scroll..visible_end).contains(&hover_line) {
+            if let Some(link) = app
+                .link_spans_by_line
+                .get(&hover_line)
+                .and_then(|spans| spans.get(span_index))
+            {
+                let vis_idx = hover_line - scroll;
+                apply_hover_style(
+                    &mut visible_lines[vis_idx],
+                    link.start_col,
+                    link.end_col,
+                    theme.markdown.link_hover,
+                );
             }
         }
     }
@@ -89,6 +107,23 @@ fn inner_content_area(area: Rect) -> Rect {
             .saturating_sub(CONTENT_HORIZONTAL_PADDING.saturating_mul(2))
             .saturating_sub(SCROLLBAR_WIDTH),
         height: area.height,
+    }
+}
+
+fn apply_hover_style(
+    line: &mut ratatui::text::Line<'static>,
+    start_col: usize,
+    end_col: usize,
+    hover_color: Color,
+) {
+    let mut col = 0usize;
+    for span in &mut line.spans {
+        let w = display_width(span.content.as_ref());
+        let span_end = col + w;
+        if span_end > start_col && col < end_col {
+            span.style = span.style.fg(hover_color);
+        }
+        col = span_end;
     }
 }
 
