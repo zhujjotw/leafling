@@ -1,0 +1,39 @@
+name: Contrib Refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      timestamp:
+        description: "Timestamp (optional)"
+        required: false
+        type: string
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Refresh contrib image
+        env:
+          REPO: ${{ github.repository }}
+          INPUT_TS: ${{ inputs.timestamp }}
+        run: |
+          BASE_URL="https://contrib.rocks/image?repo=${REPO}"
+
+          if [ -z "$INPUT_TS" ]; then
+            TS=$(date +%s)
+          else
+            TS="$INPUT_TS"
+          fi
+
+          URL="${BASE_URL}&t=${TS}"
+
+          echo "Repo: ${REPO}"
+          echo "URL: ${URL}"
+          echo ""
+
+          curl -s -o /dev/null \
+            -w "HTTP status: %{http_code}\n" \
+            "$URL"
+
+          echo "Done"
