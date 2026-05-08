@@ -420,9 +420,13 @@ pub(crate) fn run(
                             KeyCode::Char('p') => {
                                 app.open_path_popup();
                             }
+                            KeyCode::Char('0') => {
+                                app.toggle_reverse_mode();
+                                state_changed = false;
+                            }
                             KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
                                 if let Some(n) = c.to_digit(10) {
-                                    app.jump_to_toc(n as usize - 1);
+                                    app.cycle_numkey(n as u8);
                                 }
                             }
                             _ => state_changed = false,
