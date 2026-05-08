@@ -8,12 +8,8 @@ use ratatui::{
 
 use super::{CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH};
 
-pub(super) fn render_content_panel(
-    f: &mut Frame,
-    app: &mut App,
-    area: Rect,
-    viewport_height: usize,
-) {
+pub(super) fn render_content_panel(f: &mut Frame, app: &mut App, area: Rect) {
+    let viewport_height = area.height as usize;
     let theme = app_theme();
     f.render_widget(
         Paragraph::new("").style(Style::default().bg(theme.ui.content_bg)),
@@ -69,16 +65,12 @@ pub(super) fn render_content_panel(
         && mouse_row >= area.y
         && mouse_row < area.y + area.height;
 
-    let total = app.total();
+    let max_scroll = app.max_scroll();
     let track_len = area.height as usize;
-    let mouse_on_thumb = on_sb_column && track_len > 0 && total > 0 && {
-        let thumb_size = (track_len * track_len / total).max(1).min(track_len);
+    let mouse_on_thumb = on_sb_column && track_len > 0 && max_scroll > 0 && {
+        let thumb_size = (track_len * track_len / max_scroll).max(1).min(track_len);
         let max_offset = track_len.saturating_sub(thumb_size);
-        let thumb_offset = if total <= 1 {
-            0
-        } else {
-            app.scroll() * max_offset / (total - 1)
-        };
+        let thumb_offset = app.scroll() * max_offset / max_scroll;
         let thumb_top = area.y as usize + thumb_offset;
         let thumb_bottom = thumb_top + thumb_size;
         let row = mouse_row as usize;
@@ -94,7 +86,7 @@ pub(super) fn render_content_panel(
         scrollbar = scrollbar.thumb_style(Style::default().fg(theme.ui.scrollbar_hover));
     }
 
-    let mut scrollbar_state = ScrollbarState::new(app.total()).position(app.scroll());
+    let mut scrollbar_state = ScrollbarState::new(max_scroll).position(app.scroll());
     f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
 }
 
@@ -127,8 +119,8 @@ fn apply_hover_style(
     }
 }
 
-pub(super) fn render_status_bar(f: &mut Frame, app: &mut App, area: Rect, viewport_height: usize) {
-    let pct = app.scroll_percent(viewport_height);
+pub(super) fn render_status_bar(f: &mut Frame, app: &mut App, area: Rect) {
+    let pct = app.scroll_percent();
     let bar_bg = super::status::status_bar_bg();
     app.refresh_status_cache(pct);
 

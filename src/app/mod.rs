@@ -793,8 +793,13 @@ impl App {
         self.last_file_state = Some(state);
     }
 
+    pub(crate) fn max_scroll(&self) -> usize {
+        self.total()
+            .saturating_sub(self.content_area.height as usize)
+    }
+
     pub(crate) fn scroll_down(&mut self, n: usize) {
-        self.scroll = (self.scroll + n).min(self.total().saturating_sub(1));
+        self.scroll = (self.scroll + n).min(self.max_scroll());
     }
 
     pub(crate) fn scroll_up(&mut self, n: usize) {
@@ -806,11 +811,11 @@ impl App {
     }
 
     pub(crate) fn scroll_bottom(&mut self) {
-        self.scroll = self.total().saturating_sub(1);
+        self.scroll = self.max_scroll();
     }
 
     pub(crate) fn scroll_to(&mut self, position: usize) {
-        self.scroll = position.min(self.total().saturating_sub(1));
+        self.scroll = position.min(self.max_scroll());
     }
 
     pub(crate) fn toggle_toc(&mut self) {
@@ -824,15 +829,16 @@ impl App {
 
     pub(crate) fn jump_to_toc(&mut self, idx: usize) {
         if let Some(e) = self.toc.get(idx) {
-            self.scroll = e.line;
+            self.scroll = e.line.min(self.max_scroll());
         }
     }
 
-    pub(crate) fn scroll_percent(&self, vh: usize) -> u16 {
-        if self.total() <= vh {
+    pub(crate) fn scroll_percent(&self) -> u16 {
+        let max = self.max_scroll();
+        if max == 0 {
             return 100;
         }
-        ((self.scroll * 100) / (self.total() - vh).max(1)) as u16
+        ((self.scroll * 100) / max).min(100) as u16
     }
 
     pub(crate) fn sync_render_width(
@@ -885,7 +891,8 @@ impl App {
 
         if old_total > 0 {
             self.scroll = ((self.scroll as f64 / old_total as f64) * new_total as f64) as usize;
-            self.scroll = self.scroll.min(new_total.saturating_sub(1));
+            let vh = self.content_area.height as usize;
+            self.scroll = self.scroll.min(new_total.saturating_sub(vh));
         }
 
         self.invalidate_theme_preview_cache();
