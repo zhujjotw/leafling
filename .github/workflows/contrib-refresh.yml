@@ -7,12 +7,62 @@ on:
         description: "Timestamp (optional)"
         required: false
         type: string
+        default: "717807600"
+
+permissions:
+  contents: write
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Configure GPG agent
+        run: |
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          echo "allow-preset-passphrase" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent
+
+      - name: Preset GPG passphrase
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          KEYGRIP=$(gpg --list-secret-keys --with-keygrip --with-colons \
+            | grep '^grp' | head -1 | cut -d: -f10)
+          if [ -z "$KEYGRIP" ]; then
+            echo "Failed to extract GPG keygrip" >&2
+            exit 1
+          fi
+          gpg-connect-agent "PRESET_PASSPHRASE $KEYGRIP -1 \
+            $(echo -n "$GPG_PASSPHRASE" | xxd -p -c 256)" /bye
+
+      - name: Configure git author
+        run: |
+          git config user.name "RivoLink"
+          git config user.email "rivo.link@gmail.com"
+
+      - name: Configure signing key
+        run: |
+          KEY_ID=$(gpg --list-secret-keys --keyid-format long \
+            | grep '^sec' | head -1 | awk '{print $2}' \
+            | cut -d'/' -f2)
+          if [ -z "$KEY_ID" ]; then
+            echo "Failed to extract GPG key ID" >&2
+            exit 1
+          fi
+          git config user.signingkey "$KEY_ID"
+
+      - name: Enable commit signing
+        run: git config commit.gpgsign true
+
       - name: Refresh contrib image
         env:
           REPO: ${{ github.repository }}
@@ -36,4 +86,22 @@ jobs:
             -w "HTTP status: %{http_code}\n" \
             "$URL"
 
+          sed -i "s|contrib.rocks/image?repo=${REPO}.*)|contrib.rocks/image?repo=${REPO}\&t=${TS})|" README.md
+
           echo "Done"
+
+      - name: Commit and push
+        env:
+          INPUT_TS: ${{ inputs.timestamp }}
+        run: |
+          git diff --quiet README.md && exit 0
+
+          if [ -z "$INPUT_TS" ]; then
+            TS=$(date +%s)
+          else
+            TS="$INPUT_TS"
+          fi
+
+          git add README.md
+          git commit -m "chore: refresh contrib image (t=${TS})"
+          git push
