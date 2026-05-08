@@ -83,7 +83,7 @@ impl App {
         self.search.matches = search_matches;
         self.search.idx = 0;
         if let Some(&f) = self.search.matches.first() {
-            self.scroll = f;
+            self.scroll = f.min(self.max_scroll());
         }
     }
 
@@ -163,7 +163,7 @@ impl App {
             return;
         }
         self.search.idx = (self.search.idx + 1) % self.search.matches.len();
-        self.scroll = self.search.matches[self.search.idx];
+        self.scroll = self.search.matches[self.search.idx].min(self.max_scroll());
     }
 
     pub(crate) fn prev_match(&mut self) {
@@ -175,6 +175,6 @@ impl App {
         } else {
             self.search.idx -= 1;
         }
-        self.scroll = self.search.matches[self.search.idx];
+        self.scroll = self.search.matches[self.search.idx].min(self.max_scroll());
     }
 }

@@ -739,7 +739,7 @@ fn scrollbar_scroll_to(app: &mut App, row: u16) {
     let row = row as usize;
     if row >= content_top && content_height > 1 {
         let offset = (row - content_top).min(content_height - 1);
-        let max_scroll = app.total().saturating_sub(1);
+        let max_scroll = app.max_scroll();
         let scroll_pos = offset * max_scroll / (content_height - 1);
         app.scroll_to(scroll_pos);
     }

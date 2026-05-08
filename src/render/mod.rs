@@ -39,9 +39,8 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     }
 
     app.content_area = content_area;
-    let viewport_height = content_area.height as usize;
-    content::render_content_panel(f, app, content_area, viewport_height);
-    content::render_status_bar(f, app, root[1], viewport_height);
+    content::render_content_panel(f, app, content_area);
+    content::render_status_bar(f, app, root[1]);
 
     if app.is_help_open() {
         popup::render_help_popup(f, app);
