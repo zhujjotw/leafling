@@ -88,6 +88,7 @@ impl App {
     }
 
     pub(crate) fn begin_search(&mut self) {
+        self.reset_numkey_state();
         self.search.mode = true;
         self.search.draft = self.search.query.clone();
         self.search.draft_hash = self.search.query_hash;
@@ -162,6 +163,7 @@ impl App {
         if self.search.matches.is_empty() {
             return;
         }
+        self.reset_numkey_state();
         self.search.idx = (self.search.idx + 1) % self.search.matches.len();
         self.scroll = self.search.matches[self.search.idx].min(self.max_scroll());
     }
@@ -170,6 +172,7 @@ impl App {
         if self.search.matches.is_empty() {
             return;
         }
+        self.reset_numkey_state();
         if self.search.idx == 0 {
             self.search.idx = self.search.matches.len() - 1;
         } else {

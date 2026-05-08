@@ -72,7 +72,7 @@ fn popup_footer_line(segments: &[&'static str], bg: Color) -> Line<'static> {
 
 pub(super) fn render_help_popup(f: &mut Frame, _app: &App) {
     let theme = app_theme();
-    let area = centered_rect(54, 23, f.area());
+    let area = centered_rect(54, 24, f.area());
     let section_style = Style::default()
         .fg(theme.ui.toc_primary_active)
         .add_modifier(Modifier::BOLD);
@@ -112,6 +112,10 @@ pub(super) fn render_help_popup(f: &mut Frame, _app: &App) {
         Line::from(vec![
             Span::styled("g/G        ", key_style),
             Span::styled("top/bottom", text_style),
+        ]),
+        Line::from(vec![
+            Span::styled("1-9/0+1-9  ", key_style),
+            Span::styled("jump/reverse", text_style),
         ]),
         Line::from(""),
         Line::from(vec![
