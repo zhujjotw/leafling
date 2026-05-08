@@ -590,9 +590,8 @@ pub(crate) fn run(
             .unwrap_or(false)
         {
             pending_resize = None;
-            if sync_render_width(terminal, app, ss, themes)? {
-                needs_redraw = true;
-            }
+            sync_render_width(terminal, app, ss, themes)?;
+            needs_redraw = true;
         }
 
         if app.is_watch_enabled() {
