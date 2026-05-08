@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.20.1](https://github.com/RivoLink/leaf/releases/tag/1.20.1)] - 2026-05-08
+
+### Fixed
+
+- contrib refresh token ([#109](https://github.com/RivoLink/leaf/pull/109))
+- pr contrib refresh workflow ([#107](https://github.com/RivoLink/leaf/pull/107))
+- contrib refresh workflow ([#106](https://github.com/RivoLink/leaf/pull/106))
+- contrib image refresh ([#105](https://github.com/RivoLink/leaf/pull/105))
+- toc numkey navigation ([#104](https://github.com/RivoLink/leaf/pull/104))
+- redraw on terminal resize ([#102](https://github.com/RivoLink/leaf/pull/102))
+- cap max scroll at document end ([#103](https://github.com/RivoLink/leaf/pull/103))
+
+### Changed
+
+- refresh contrib image ([#110](https://github.com/RivoLink/leaf/pull/110))
+
 ## [[1.20.0](https://github.com/RivoLink/leaf/releases/tag/1.20.0)] - 2026-05-07
 
 ### Added
