@@ -3,21 +3,50 @@ use super::file_picker::{
 };
 use super::App;
 use std::{fs, path::PathBuf, sync::mpsc, thread, time::Instant};
+use syntect::parsing::SyntaxSet;
 
 const MAX_FUZZY_PICKER_DIRS_VISITED: usize = 5_000;
 const MAX_FUZZY_PICKER_FILES_INDEXED: usize = 10_000;
 const MAX_FUZZY_PICKER_INDEX_DURATION: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl App {
-    pub(super) fn is_markdown_path(path: &std::path::Path) -> bool {
+    pub(crate) fn is_markdown_extension(ext: &str) -> bool {
         matches!(
-            path.extension().and_then(|ext| ext.to_str()),
-            Some("md" | "markdown" | "mdown" | "mkd")
+            ext.to_ascii_lowercase().as_str(),
+            "md" | "markdown" | "mdown" | "mkd"
         )
+    }
+
+    pub(crate) fn has_code_syntax(ext: &str, ss: &SyntaxSet) -> bool {
+        let plain = ss.find_syntax_plain_text();
+        ss.find_syntax_by_extension(ext)
+            .or_else(|| ss.find_syntax_by_token(ext))
+            .is_some_and(|s| s.name != plain.name)
+    }
+
+    pub(crate) fn fence_wrap(src: &str, ext: &str) -> String {
+        format!("````{ext}\n{src}\n````")
+    }
+
+    pub(crate) fn wrap_as_code_block(src: String, ext: &str, ss: &SyntaxSet) -> (String, bool) {
+        if Self::is_markdown_extension(ext) || !Self::has_code_syntax(ext, ss) {
+            (src, false)
+        } else {
+            (Self::fence_wrap(&src, ext), true)
+        }
+    }
+
+    pub(super) fn is_accepted_path(path: &std::path::Path, extras: &[String]) -> bool {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some(ext) if Self::is_markdown_extension(ext) => true,
+            Some(ext) => extras.iter().any(|e| e.eq_ignore_ascii_case(ext)),
+            None => false,
+        }
     }
 
     pub(super) fn build_file_picker_entries(
         dir: &std::path::Path,
+        extras: &[String],
     ) -> std::io::Result<Vec<FilePickerEntry>> {
         let mut entries = Vec::new();
 
@@ -38,7 +67,7 @@ impl App {
 
             if file_type.is_dir() {
                 dirs.push(FilePickerEntry::new(format!("{name}/"), path));
-            } else if file_type.is_file() && Self::is_markdown_path(&path) {
+            } else if file_type.is_file() && Self::is_accepted_path(&path, extras) {
                 files.push(FilePickerEntry::new(name, path));
             }
         }
@@ -52,6 +81,7 @@ impl App {
 
     pub(super) fn build_fuzzy_file_picker_entries(
         dir: &std::path::Path,
+        extras: &[String],
     ) -> std::io::Result<PickerIndexResult> {
         let mut entries = Vec::new();
         let mut stack = vec![dir.to_path_buf()];
@@ -110,7 +140,7 @@ impl App {
                     continue;
                 }
 
-                if file_type.is_file() && Self::is_markdown_path(&path) {
+                if file_type.is_file() && Self::is_accepted_path(&path, extras) {
                     if files_indexed >= MAX_FUZZY_PICKER_FILES_INDEXED {
                         truncated = Some(PickerIndexTruncation::File);
                         break;
@@ -243,6 +273,7 @@ impl App {
         };
 
         let worker_dir = dir.clone();
+        let extras = self.file_picker.extras.clone();
         let (tx, rx) = mpsc::channel();
         crate::runtime::debug_log(
             self.debug_input,
@@ -250,13 +281,14 @@ impl App {
         );
         thread::spawn(move || {
             let result = match mode {
-                FilePickerMode::Browser => {
-                    Self::build_file_picker_entries(&worker_dir).map(|entries| PickerIndexResult {
+                FilePickerMode::Browser => Self::build_file_picker_entries(&worker_dir, &extras)
+                    .map(|entries| PickerIndexResult {
                         entries,
                         truncated: None,
-                    })
+                    }),
+                FilePickerMode::Fuzzy => {
+                    Self::build_fuzzy_file_picker_entries(&worker_dir, &extras)
                 }
-                FilePickerMode::Fuzzy => Self::build_fuzzy_file_picker_entries(&worker_dir),
             };
             let _ = tx.send(result);
         });

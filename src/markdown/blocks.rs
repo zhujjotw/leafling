@@ -142,6 +142,7 @@ pub(super) struct CodeBlockRenderContext<'a> {
     pub(super) theme_colors: &'a MarkdownTheme,
     pub(super) blockquote_depth: usize,
     pub(super) list_stack: &'a [ListKind],
+    pub(super) file_mode: bool,
 }
 
 pub(super) fn push_code_block_lines(
@@ -173,8 +174,14 @@ pub(super) fn push_code_block_lines(
         code_lang.clone()
     };
     let available_width = ctx.render_width.saturating_sub(prefix_width);
-    let (code_lines, inner_width, digit_width) =
-        highlight_code(code_buf, code_lang, ctx.ss, ctx.theme, available_width);
+    let (code_lines, inner_width, digit_width) = highlight_code(
+        code_buf,
+        code_lang,
+        ctx.ss,
+        ctx.theme,
+        available_width,
+        ctx.file_mode,
+    );
     let gutter_width = digit_width + 2;
     let gutter_style = Style::default().fg(ctx.theme_colors.code_gutter);
     let content_width = inner_width.saturating_sub(gutter_width + 1);

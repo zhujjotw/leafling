@@ -139,12 +139,29 @@ leaf --config
 This opens the configuration file in your editor. If the file does not exist yet, leaf creates it with documented defaults.
 
 ```toml
-theme = "ocean"      # arctic, forest, ocean, solarized-dark, or a custom theme file
-editor = "nano"      # any editor in PATH
-watch = false        # auto-reload when opening a file
+theme = "ocean"          # arctic, forest, ocean, solarized-dark, or a custom theme file
+editor = "nano"          # any editor in PATH
+watch = false            # auto-reload when opening a file
+extras = ["txt", "rs"]   # extra file types shown in the picker
 ```
 
 All settings are optional. CLI arguments always take priority. See [`config.toml`](config.toml) for details.
+
+## Extra Files
+
+Non-Markdown files can be listed in the file picker by adding their extensions to `config.toml`:
+
+```toml
+extras = ["txt", "csv", "rs", "java", "json", "yaml"]
+```
+
+Code files get syntax highlighting; text files are rendered as plain Markdown.
+
+Any file can also be opened directly from the command line, regardless of the `extras` setting:
+
+```bash
+leaf main.rs
+```
 
 ## Custom Themes
 
@@ -202,6 +219,7 @@ See [`gruvbox.toml`](gruvbox.toml) for a complete example with all available col
 - **Editor integration** — Open the current file in your preferred editor.
 - **Frontmatter support** — YAML frontmatter rendered as a table (horizontal or vertical based on key count).
 - **Rich Markdown rendering** — Tables, lists, blockquotes, rules, bold, italic, and strikethrough.
+- **Extra file types** — Open any file; code files get syntax highlighting, text files render as Markdown.
 - **Syntax highlighting** — Common aliases like `py`, `cpp`, `json`, `toml`, `ps1`, `dockerfile`.
 - **LaTeX support** — Inline, block, and `latex` / `tex` code blocks rendered as formulas.
 - **Navigation** — TOC sidebar, active section tracking, heading jumps, and search.

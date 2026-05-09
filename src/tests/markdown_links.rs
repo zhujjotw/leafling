@@ -11,7 +11,7 @@ use syntect::parsing::SyntaxSet;
 fn blockquote_bold_link_preserves_link_color() {
     let (ss, theme) = test_assets();
     let src = "> text [**lien bold**](https://rivolink.mg)\n";
-    let (lines, _, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
+    let (lines, _, _) = parse_markdown(src, &ss, &theme, &test_md_theme(), false);
     let app_theme = app_theme();
     let theme_colors = &app_theme.markdown;
 
@@ -46,7 +46,7 @@ fn link_spans_detected_for_all_link_types() {
 
 [A](https://example.com/a) and [B](https://example.com/b)
 ";
-    let (_, _, link_spans) = parse_markdown(md, &ss, &theme, &test_md_theme());
+    let (_, _, link_spans) = parse_markdown(md, &ss, &theme, &test_md_theme(), false);
 
     let urls: Vec<&str> = link_spans.iter().map(|ls| ls.url.as_str()).collect();
 
@@ -106,7 +106,7 @@ fn link_spans_in_table_are_detected() {
 |------|------|
 | Test | [example](https://example.com/table) |
 ";
-    let (_, _, link_spans) = parse_markdown(md, &ss, &theme, &test_md_theme());
+    let (_, _, link_spans) = parse_markdown(md, &ss, &theme, &test_md_theme(), false);
 
     let urls: Vec<&str> = link_spans.iter().map(|ls| ls.url.as_str()).collect();
     assert!(

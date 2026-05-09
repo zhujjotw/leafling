@@ -13,7 +13,7 @@ use syntect::highlighting::ThemeSet;
 #[test]
 fn search_matches_across_span_boundaries() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("hello **world**", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown("hello **world**", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.set_search_query("hello world");
@@ -145,8 +145,13 @@ fn parse_cli_rejects_empty_theme_name() {
 #[test]
 fn cancelling_search_clears_query_and_matches() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) =
-        parse_markdown("alpha\nbeta\nalpha beta\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown(
+        "alpha\nbeta\nalpha beta\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+        false,
+    );
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.set_search_query("alpha");
@@ -166,7 +171,8 @@ fn cancelling_search_clears_query_and_matches() {
 #[test]
 fn confirm_search_uses_draft_and_updates_matches() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("alpha\nbeta\nbeta\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) =
+        parse_markdown("alpha\nbeta\nbeta\n", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.begin_search();
@@ -182,8 +188,13 @@ fn confirm_search_uses_draft_and_updates_matches() {
 #[test]
 fn confirm_search_with_new_query_restarts_from_first_match() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) =
-        parse_markdown("alpha\nbeta\nbeta again\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown(
+        "alpha\nbeta\nbeta again\n",
+        &ss,
+        &theme,
+        &test_md_theme(),
+        false,
+    );
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.set_search_query("alpha");
@@ -207,6 +218,7 @@ fn enter_in_normal_mode_advances_active_search() {
         &ss,
         &theme,
         &test_md_theme(),
+        false,
     );
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
@@ -223,7 +235,7 @@ fn enter_in_normal_mode_advances_active_search() {
 #[test]
 fn ctrl_c_cancels_search_prompt_and_clears_active_query() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("alpha\nbeta\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown("alpha\nbeta\n", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.set_search_query("alpha");
@@ -242,7 +254,8 @@ fn ctrl_c_cancels_search_prompt_and_clears_active_query() {
 #[test]
 fn esc_clears_active_search_from_normal_mode() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("alpha\nbeta alpha\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) =
+        parse_markdown("alpha\nbeta alpha\n", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.set_search_query("alpha");
@@ -259,7 +272,8 @@ fn esc_clears_active_search_from_normal_mode() {
 #[test]
 fn ctrl_c_clears_active_search_before_exit() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("alpha\nbeta alpha\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) =
+        parse_markdown("alpha\nbeta alpha\n", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     app.set_search_query("alpha");
@@ -274,7 +288,7 @@ fn ctrl_c_clears_active_search_before_exit() {
 #[test]
 fn active_highlight_line_is_none_without_search_matches() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("alpha\nbeta\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown("alpha\nbeta\n", &ss, &theme, &test_md_theme(), false);
     let app = App::new(lines, toc, "stdin".to_string(), false, false, None, None);
 
     assert_eq!(app.active_highlight_line(), None);
@@ -291,7 +305,7 @@ fn check_modified_detects_file_metadata_change() {
     fs::write(&path, "# Before\n").unwrap();
 
     let src = fs::read_to_string(&path).unwrap();
-    let (lines, toc, _) = parse_markdown(&src, &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown(&src, &ss, &theme, &test_md_theme(), false);
     let state = read_file_state(&path).unwrap();
     let mut app = App::new_with_source(
         lines,
@@ -360,7 +374,8 @@ fn sync_render_width_preserves_scroll_proportion() {
         })
         .collect::<Vec<_>>()
         .join("\n\n");
-    let (lines, toc, _) = parse_markdown_with_width(&source, &ss, &theme, 80, &test_md_theme());
+    let (lines, toc, _) =
+        parse_markdown_with_width(&source, &ss, &theme, 80, &test_md_theme(), false);
     let mut app = App::new_with_source(
         lines,
         toc,
@@ -395,7 +410,7 @@ fn check_modified_reports_metadata_when_no_previous_file_state() {
     fs::write(&path, "# Initial\n").unwrap();
 
     let src = fs::read_to_string(&path).unwrap();
-    let (lines, toc, _) = parse_markdown(&src, &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown(&src, &ss, &theme, &test_md_theme(), false);
     let mut app = App::new_with_source(
         lines,
         toc,
@@ -423,7 +438,8 @@ fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
     let (ss, theme) = test_assets();
     let ts = ThemeSet::load_defaults();
     let source = "One paragraph that does not matter much for this width clamp test.";
-    let (lines, toc, _) = parse_markdown_with_width(source, &ss, &theme, 20, &test_md_theme());
+    let (lines, toc, _) =
+        parse_markdown_with_width(source, &ss, &theme, 20, &test_md_theme(), false);
     let mut app = App::new_with_source(
         lines,
         toc,
@@ -441,7 +457,7 @@ fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
     assert!(!app.sync_render_width(10, &ss, &ts));
     assert_eq!(
         app.total(),
-        parse_markdown_with_width(source, &ss, &theme, 20, &test_md_theme())
+        parse_markdown_with_width(source, &ss, &theme, 20, &test_md_theme(), false)
             .0
             .len()
     );
@@ -450,7 +466,7 @@ fn sync_render_width_returns_false_when_clamped_width_is_unchanged() {
 #[test]
 fn initial_mode_has_no_content() {
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown("", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown("", &ss, &theme, &test_md_theme(), false);
     let app = App::new_with_source(
         lines,
         toc,
@@ -470,7 +486,7 @@ fn initial_mode_has_no_content() {
 fn preview_mode_has_content() {
     let src = "# Hello";
     let (ss, theme) = test_assets();
-    let (lines, toc, _) = parse_markdown(src, &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown(src, &ss, &theme, &test_md_theme(), false);
     let app = App::new_with_source(
         lines,
         toc,

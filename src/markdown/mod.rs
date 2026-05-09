@@ -197,8 +197,9 @@ pub(crate) fn parse_markdown(
     ss: &syntect::parsing::SyntaxSet,
     theme: &syntect::highlighting::Theme,
     md_theme: &MarkdownTheme,
+    file_mode: bool,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>, Vec<LinkSpan>) {
-    parse_markdown_with_width(src, ss, theme, DEFAULT_RENDER_WIDTH, md_theme)
+    parse_markdown_with_width(src, ss, theme, DEFAULT_RENDER_WIDTH, md_theme, file_mode)
 }
 
 pub(crate) fn parse_markdown_with_width(
@@ -207,6 +208,7 @@ pub(crate) fn parse_markdown_with_width(
     theme: &syntect::highlighting::Theme,
     render_width: usize,
     theme_colors: &MarkdownTheme,
+    file_mode: bool,
 ) -> (Vec<Line<'static>>, Vec<TocEntry>, Vec<LinkSpan>) {
     let (src, fm_pairs) = frontmatter::extract_frontmatter(src);
     let mut lines: Vec<Line<'static>> = Vec::new();
@@ -329,6 +331,7 @@ pub(crate) fn parse_markdown_with_width(
                             theme_colors,
                             blockquote_depth,
                             list_stack: &list_stack,
+                            file_mode,
                         },
                         &mut item_stack,
                     );

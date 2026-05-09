@@ -57,7 +57,12 @@ impl App {
         };
         let file_state = read_file_state(path);
         let content_hash = hash_str(&src);
-        self.source = src;
+        self.source = if self.file_mode {
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            Self::fence_wrap(&src, ext)
+        } else {
+            src
+        };
 
         self.reparse_source(ss, themes);
         self.last_file_state = file_state;
@@ -80,10 +85,19 @@ impl App {
             .unwrap_or_else(|| path.display().to_string());
         let file_state = read_file_state(&path);
         let content_hash = hash_str(&src);
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let (src, is_code_file) = Self::wrap_as_code_block(src, ext, ss);
+        self.file_mode = is_code_file;
         let theme = current_syntect_theme(themes);
         let at = app_theme();
-        let (lines, toc, link_spans) =
-            parse_markdown_with_width(&src, ss, theme, self.render_width, &at.markdown);
+        let (lines, toc, link_spans) = parse_markdown_with_width(
+            &src,
+            ss,
+            theme,
+            self.render_width,
+            &at.markdown,
+            self.file_mode,
+        );
 
         let first_load = self.filepath.is_none();
         self.filename = filename;
@@ -113,8 +127,14 @@ impl App {
         let theme = current_syntect_theme(themes);
         let at = app_theme();
         let old_total = self.total();
-        let (new_lines, new_toc, link_spans) =
-            parse_markdown_with_width(&self.source, ss, theme, self.render_width, &at.markdown);
+        let (new_lines, new_toc, link_spans) = parse_markdown_with_width(
+            &self.source,
+            ss,
+            theme,
+            self.render_width,
+            &at.markdown,
+            self.file_mode,
+        );
         let new_total = new_lines.len();
 
         if old_total > 0 {

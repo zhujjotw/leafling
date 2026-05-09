@@ -213,8 +213,15 @@ fn main() -> Result<()> {
     let last_file_state = filepath.as_ref().and_then(read_file_state);
     let last_content_hash = hash_str(&src);
 
+    let ext = filepath
+        .as_ref()
+        .and_then(|p| p.extension())
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let (src, file_mode) = App::wrap_as_code_block(src, ext, &ss);
+
     let at = app_theme();
-    let (lines, toc, link_spans) = parse_markdown(&src, &ss, &theme, &at.markdown);
+    let (lines, toc, link_spans) = parse_markdown(&src, &ss, &theme, &at.markdown, file_mode);
     let mut app = App::new_with_source(
         lines,
         toc,
@@ -230,6 +237,8 @@ fn main() -> Result<()> {
     app.set_link_spans(link_spans);
     app.set_last_content_hash(last_content_hash);
     app.set_watch_from_config(watch_from_config);
+    app.set_extras(user_config.extras);
+    app.set_file_mode(file_mode);
     app.set_editor_config(Some(resolved_editor));
     app.set_config_warning(config_warning);
     if let Some(dir) = open_browser_picker_dir {

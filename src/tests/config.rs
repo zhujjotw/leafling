@@ -6,11 +6,13 @@ fn parse_full_config() {
 theme = "forest"
 editor = "vim"
 watch = true
+extras = ["txt", "csv"]
 "#;
     let config: LeafConfig = toml::from_str(toml).unwrap();
     assert_eq!(config.theme.as_deref(), Some("forest"));
     assert_eq!(config.editor.as_deref(), Some("vim"));
     assert_eq!(config.watch, Some(true));
+    assert_eq!(config.extras, vec!["txt", "csv"]);
     assert!(config.themes.is_empty());
 }
 
@@ -31,6 +33,7 @@ fn parse_empty_config() {
     assert_eq!(config.theme, None);
     assert_eq!(config.editor, None);
     assert_eq!(config.watch, None);
+    assert!(config.extras.is_empty());
     assert!(config.themes.is_empty());
 }
 
@@ -43,7 +46,29 @@ fn parse_invalid_toml_returns_default() {
     assert_eq!(fallback.theme, None);
     assert_eq!(fallback.editor, None);
     assert_eq!(fallback.watch, None);
+    assert!(fallback.extras.is_empty());
     assert!(fallback.themes.is_empty());
+}
+
+#[test]
+fn parse_extras_config() {
+    let toml = r#"extras = ["txt", "csv", "log"]"#;
+    let config: LeafConfig = toml::from_str(toml).unwrap();
+    assert_eq!(config.extras, vec!["txt", "csv", "log"]);
+}
+
+#[test]
+fn parse_extras_empty_array() {
+    let toml = r#"extras = []"#;
+    let config: LeafConfig = toml::from_str(toml).unwrap();
+    assert!(config.extras.is_empty());
+}
+
+#[test]
+fn parse_extras_missing_defaults_to_empty() {
+    let toml = r#"theme = "ocean""#;
+    let config: LeafConfig = toml::from_str(toml).unwrap();
+    assert!(config.extras.is_empty());
 }
 
 #[test]
