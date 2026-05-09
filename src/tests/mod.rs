@@ -14,8 +14,13 @@ use syntect::{
 mod app;
 mod config;
 mod editor;
+mod file_fuzzy;
 mod file_picker;
-mod markdown;
+mod markdown_blocks;
+mod markdown_embedded;
+mod markdown_links;
+mod markdown_lists;
+mod markdown_tables;
 mod render;
 mod theme;
 mod update;
