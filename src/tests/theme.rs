@@ -125,7 +125,7 @@ fn theme_picker_restores_original_preset_on_escape() {
     let _guard = lock_theme_test_state();
     let (ss, theme) = test_assets();
     let ts = ThemeSet::load_defaults();
-    let (lines, toc, _) = parse_markdown("# Demo\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown("# Demo\n", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new_with_source(
         lines,
         toc,
@@ -165,6 +165,7 @@ fn theme_picker_caches_previewed_themes_for_reuse() {
         &ss,
         &theme,
         &test_md_theme(),
+        false,
     );
     let mut app = App::new_with_source(
         lines,
@@ -214,7 +215,7 @@ heading_1 = "#010203"
     let ss = syntect::parsing::SyntaxSet::load_defaults_newlines();
     let ts = ThemeSet::load_defaults();
     let theme = current_syntect_theme(&ts).clone();
-    let (lines, toc, _) = parse_markdown("# Demo\n", &ss, &theme, &test_md_theme());
+    let (lines, toc, _) = parse_markdown("# Demo\n", &ss, &theme, &test_md_theme(), false);
     let mut app = App::new_with_source(
         lines,
         toc,

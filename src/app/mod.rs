@@ -116,6 +116,7 @@ pub(crate) struct App {
     pub(crate) last_click: Option<(u16, u16, Instant)>,
     numkey_cycle: Option<NumkeyCycleState>,
     reverse_mode: bool,
+    pub(super) file_mode: bool,
 }
 
 impl App {
@@ -208,6 +209,7 @@ impl App {
                 open: false,
                 mode: FilePickerMode::Browser,
                 dir: PathBuf::from("."),
+                extras: Vec::new(),
                 entries: Vec::new(),
                 filtered: Vec::new(),
                 match_positions: Vec::new(),
@@ -243,10 +245,19 @@ impl App {
             last_click: None,
             numkey_cycle: None,
             reverse_mode: false,
+            file_mode: false,
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
         app
+    }
+
+    pub(crate) fn set_extras(&mut self, extras: Vec<String>) {
+        self.file_picker.extras = extras;
+    }
+
+    pub(crate) fn set_file_mode(&mut self, file_mode: bool) {
+        self.file_mode = file_mode;
     }
 
     pub(crate) fn set_watch_from_config(&mut self, value: bool) {

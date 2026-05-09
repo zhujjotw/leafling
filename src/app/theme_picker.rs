@@ -120,8 +120,14 @@ impl App {
 
         let theme = current_syntect_theme(themes);
         let at = app_theme();
-        let (new_lines, new_toc, link_spans) =
-            parse_markdown_with_width(&self.source, ss, theme, self.render_width, &at.markdown);
+        let (new_lines, new_toc, link_spans) = parse_markdown_with_width(
+            &self.source,
+            ss,
+            theme,
+            self.render_width,
+            &at.markdown,
+            self.file_mode,
+        );
         self.store_theme_preview(preset, &new_lines, &new_toc);
         self.replace_content(new_lines, new_toc, link_spans);
     }
@@ -140,6 +146,7 @@ impl App {
                     theme,
                     self.render_width,
                     &at.markdown,
+                    self.file_mode,
                 );
                 self.replace_content(new_lines, new_toc, link_spans);
             }

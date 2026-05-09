@@ -78,6 +78,7 @@ pub(super) fn highlight_code(
     ss: &SyntaxSet,
     theme: &Theme,
     render_width: usize,
+    full_width: bool,
 ) -> (Vec<CodeLine>, usize, usize) {
     let syntax = resolve_syntax(lang, ss);
     let mut hl = HighlightLines::new(syntax, theme);
@@ -120,17 +121,21 @@ pub(super) fn highlight_code(
     let label = if lang.is_empty() { "text" } else { lang };
     let total_lines = raw.len();
     let digit_width = total_lines.max(1).to_string().len();
-    let gutter_width = digit_width + 2;
-    let max_text = raw.iter().map(|(_, w)| *w).max().unwrap_or(0);
     let max_inner_width = render_width
         .saturating_sub(4)
         .max(UnicodeWidthStr::width(label) + 3);
-    let min_inner = (UnicodeWidthStr::width(label) + 3)
-        .max(44)
-        .min(max_inner_width);
-    let inner_width = (max_text + 2 + gutter_width)
-        .max(min_inner)
-        .min(max_inner_width);
+    let inner_width = if full_width {
+        max_inner_width
+    } else {
+        let gutter_width = digit_width + 2;
+        let max_text = raw.iter().map(|(_, w)| *w).max().unwrap_or(0);
+        let min_inner = (UnicodeWidthStr::width(label) + 3)
+            .max(44)
+            .min(max_inner_width);
+        (max_text + 2 + gutter_width)
+            .max(min_inner)
+            .min(max_inner_width)
+    };
 
     let mut out = Vec::new();
     for (spans, _text_width) in raw {

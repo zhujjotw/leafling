@@ -72,6 +72,7 @@ pub(crate) struct FilePickerState {
     pub(super) open: bool,
     pub(super) mode: FilePickerMode,
     pub(super) dir: PathBuf,
+    pub(super) extras: Vec<String>,
     pub(super) entries: Vec<FilePickerEntry>,
     pub(super) filtered: Vec<usize>,
     pub(super) match_positions: Vec<Vec<usize>>,
@@ -307,12 +308,16 @@ impl App {
     fn open_file_picker_with_mode(&mut self, dir: PathBuf, mode: FilePickerMode) -> bool {
         let result = match mode {
             FilePickerMode::Browser => {
-                Self::build_file_picker_entries(&dir).map(|entries| PickerIndexResult {
-                    entries,
-                    truncated: None,
+                Self::build_file_picker_entries(&dir, &self.file_picker.extras).map(|entries| {
+                    PickerIndexResult {
+                        entries,
+                        truncated: None,
+                    }
                 })
             }
-            FilePickerMode::Fuzzy => Self::build_fuzzy_file_picker_entries(&dir),
+            FilePickerMode::Fuzzy => {
+                Self::build_fuzzy_file_picker_entries(&dir, &self.file_picker.extras)
+            }
         };
 
         match result {

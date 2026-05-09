@@ -16,6 +16,7 @@ pub(crate) struct LeafConfig {
     pub(crate) theme: Option<String>,
     pub(crate) editor: Option<String>,
     pub(crate) watch: Option<bool>,
+    pub(crate) extras: Vec<String>,
     pub(crate) themes: BTreeMap<String, CustomThemeConfig>,
     #[serde(skip)]
     pub(crate) config_dir: Option<PathBuf>,
