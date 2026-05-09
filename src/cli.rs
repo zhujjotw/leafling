@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use crate::inline::{self, InlineSpec};
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct CliOptions {
     pub(crate) picker: bool,
@@ -12,6 +14,7 @@ pub(crate) struct CliOptions {
     pub(crate) file_arg: Option<String>,
     pub(crate) theme: Option<String>,
     pub(crate) editor: Option<String>,
+    pub(crate) inline: Option<InlineSpec>,
 }
 
 pub(crate) fn usage_text() -> &'static str {
@@ -26,6 +29,7 @@ pub(crate) fn usage_text() -> &'static str {
      \x20 -w, --watch                Watch the file for changes and reload automatically\n\
      \x20     --theme <NAME>         Set color theme preset or custom config theme\n\
      \x20 -e, --editor <NAME>        Set external editor (nano|vim|code|subl|emacs)\n\
+     \x20     --inline [SPEC]        Render to stdout (no TUI) [ansi|plain][:<width>]\n\
      \x20     --picker               Open the file browser picker\n\
      \x20     --config               Open configuration file in editor\n\
      \x20     --update               Update leaf to the latest version"
@@ -46,7 +50,7 @@ pub(crate) fn print_version() {
 pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
     let mut options = CliOptions::default();
     let mut positional_only = false;
-    let mut iter = args.iter().skip(1);
+    let mut iter = args.iter().skip(1).peekable();
 
     while let Some(arg) = iter.next() {
         if positional_only {
@@ -85,6 +89,23 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
             _ if arg.starts_with("--editor=") => {
                 options.editor = Some(arg["--editor=".len()..].to_string());
             }
+            "--inline" => {
+                let spec = match iter.peek() {
+                    Some(next) if inline::is_inline_spec(next) => {
+                        let value = iter.next().unwrap();
+                        inline::parse_inline_spec(value)?
+                    }
+                    _ => InlineSpec {
+                        format: inline::InlineFormat::Auto,
+                        width: None,
+                    },
+                };
+                options.inline = Some(spec);
+            }
+            _ if arg.starts_with("--inline=") => {
+                let value = &arg["--inline=".len()..];
+                options.inline = Some(inline::parse_inline_spec(value)?);
+            }
             "--" => positional_only = true,
             _ if arg.starts_with('-') => anyhow::bail!("Unknown flag: {arg}"),
             _ if options.file_arg.is_none() => options.file_arg = Some(arg.clone()),
@@ -122,6 +143,15 @@ pub(crate) fn parse_cli(args: &[String]) -> Result<CliOptions> {
         let has_non_picker_flags = options.file_arg.is_some();
         if has_non_picker_flags {
             anyhow::bail!("--picker cannot be combined with a file path");
+        }
+    }
+
+    if options.inline.is_some() {
+        if options.watch {
+            anyhow::bail!("--inline cannot be combined with --watch");
+        }
+        if options.picker {
+            anyhow::bail!("--inline cannot be combined with --picker");
         }
     }
 

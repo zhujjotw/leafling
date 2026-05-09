@@ -65,6 +65,11 @@
   - command-line parsing
   - usage/version text
 
+- `src/inline.rs`
+  - non-interactive stdout rendering (`--inline`)
+  - ANSI/plain format resolution and line wrapping
+  - ratatui Style-to-ANSI escape code serialization
+
 - `src/terminal.rs`
   - raw mode / alternate screen lifecycle
   - terminal restore guarantees
@@ -85,6 +90,7 @@
   - `render.rs` — table and code block border alignment
   - `theme.rs` — theme picker preview and restore
   - `config.rs` — configuration parsing tests
+  - `inline.rs` — inline spec parsing, format resolution, and write_lines tests
   - `update.rs` — release asset matching and checksum verification
 
 ## Execution flow
@@ -95,12 +101,13 @@
    - `stdin`, or
    - the file picker if no input is provided interactively.
 3. `markdown/` parses the source into rendered lines + TOC.
-4. `App` stores the state and caches.
-5. `runtime.rs` runs the event loop:
+4. If `--inline` is active, `inline.rs` writes lines to stdout and exits.
+5. `App` stores the state and caches.
+6. `runtime.rs` runs the event loop:
    - processes pending picker queue → spawns loading thread
    - polls picker loading → installs results when ready
    - handles input events through mode-aware branching
-6. `render/` draws each frame from `App`.
+7. `render/` draws each frame from `App`.
 
 ## Application modes
 

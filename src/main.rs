@@ -8,6 +8,7 @@ mod cli;
 mod clipboard;
 mod config;
 mod editor;
+mod inline;
 mod markdown;
 mod render;
 mod runtime;
@@ -19,7 +20,7 @@ mod update;
 
 use app::{App, AppConfig};
 use cli::{parse_cli, print_usage, print_version, CliOptions};
-use markdown::{hash_str, parse_markdown, read_file_state};
+use markdown::{hash_str, parse_markdown, parse_markdown_with_width, read_file_state};
 use runtime::run;
 use terminal::{finish_with_restore, TerminalSession};
 use theme::{
@@ -116,6 +117,7 @@ fn main() -> Result<()> {
         file_arg,
         theme: cli_theme,
         editor: cli_editor,
+        inline: inline_spec,
         ..
     } = options;
 
@@ -219,6 +221,25 @@ fn main() -> Result<()> {
         .and_then(|e| e.to_str())
         .unwrap_or("");
     let (src, file_mode) = App::wrap_as_code_block(src, ext, &ss);
+
+    if let Some(ref spec) = inline_spec {
+        if src.is_empty() && filepath.is_none() {
+            bail!("--inline requires a file path or stdin input");
+        }
+
+        let is_tty = io::stdout().is_terminal();
+        let width = inline::render_width(spec, is_tty);
+        let format = inline::resolve_format(spec, is_tty);
+
+        let at = app_theme();
+        let (lines, _, _) =
+            parse_markdown_with_width(&src, &ss, &theme, width, &at.markdown, file_mode);
+
+        let stdout = io::stdout();
+        let mut writer = io::BufWriter::new(stdout.lock());
+        inline::write_lines(&lines, format, width, &mut writer)?;
+        return Ok(());
+    }
 
     let at = app_theme();
     let (lines, toc, link_spans) = parse_markdown(&src, &ss, &theme, &at.markdown, file_mode);
