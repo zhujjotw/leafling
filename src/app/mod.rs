@@ -1,86 +1,45 @@
 use crate::{
     markdown::{
-        build_searchable_lines, display_width, hash_file_contents, hash_str,
-        parse_markdown_with_width, read_file_state,
+        build_searchable_lines,
         toc::{should_hide_single_h1, should_promote_h2_when_no_h1, toc_display_level, TocEntry},
         LinkSpan,
     },
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
-    theme::{app_theme, current_syntect_theme, current_theme_selection, theme_preset_index},
+    theme::{app_theme, current_theme_selection, theme_preset_index},
 };
 use ratatui::{layout::Rect, text::Line};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
-use syntect::{highlighting::ThemeSet, parsing::SyntaxSet};
 
-pub(crate) const FLASH_DURATION_MS: u64 = 1500;
-
-pub(super) mod search;
+mod search;
 pub(crate) use search::SearchState;
 
-pub(crate) mod file_picker;
+mod file_picker;
 mod fuzzy;
 pub(crate) use file_picker::{FilePickerMode, FilePickerState, PickerIndexTruncation};
 use file_picker::{PendingPicker, PickerLoadState};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum EditorFlash {
-    Opened(String),
-    NoFile,
-    EditorNotFound(String),
-}
+mod navigation;
+use navigation::NumkeyCycleState;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum WatchFlash {
-    Activated,
-    Deactivated,
-    Stdin,
-    NoFile,
-    FileNotFound,
-    NotActive,
-}
+mod content;
+pub(crate) use content::{FileChange, FileState};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum LinkFlash {
-    Copied,
-    CopyFailed,
-}
+mod flash;
+pub(crate) use flash::{EditorFlash, LinkFlash, WatchFlash, FLASH_DURATION_MS};
 
-pub(super) mod theme_picker;
+mod popups;
+pub(crate) use popups::EditorPickerState;
+
+mod links;
+
+mod io_picker;
+
+mod theme_picker;
 pub(crate) use theme_picker::ThemePickerState;
-
-use crate::editor::EditorEntry;
-
-pub(crate) struct EditorPickerState {
-    pub(super) open: bool,
-    pub(super) editors: Vec<EditorEntry>,
-    pub(super) index: usize,
-}
-
-enum CycleDirection {
-    Forward,
-    Backward,
-}
-
-struct NumkeyCycleState {
-    key: u8,
-    position: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct FileState {
-    pub(crate) modified: SystemTime,
-    pub(crate) len: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FileChange {
-    Metadata(FileState),
-    Content(FileState),
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StatusCacheKey {
@@ -290,14 +249,6 @@ impl App {
         app
     }
 
-    pub(crate) fn set_link_spans(&mut self, link_spans: Vec<LinkSpan>) {
-        self.link_spans_by_line = link_spans_to_map(link_spans);
-    }
-
-    pub(crate) fn set_last_content_hash(&mut self, last_content_hash: u64) {
-        self.last_content_hash = last_content_hash;
-    }
-
     pub(crate) fn set_watch_from_config(&mut self, value: bool) {
         self.watch_from_config = value;
     }
@@ -360,25 +311,6 @@ impl App {
 
     pub(crate) fn filename(&self) -> &str {
         &self.filename
-    }
-
-    pub(crate) fn replace_content(
-        &mut self,
-        lines: Vec<Line<'static>>,
-        toc: Vec<TocEntry>,
-        link_spans: Vec<LinkSpan>,
-    ) {
-        self.plain_lines = build_searchable_lines(&lines)
-            .into_iter()
-            .map(|line| line.to_lowercase())
-            .collect();
-        self.lines = lines;
-        self.toc = toc;
-        self.highlighted_line_cache = None;
-        self.toc_header_line = toc_header_line();
-        self.link_spans_by_line = link_spans_to_map(link_spans);
-        self.hovered_link = None;
-        self.refresh_static_caches();
     }
 
     #[cfg(test)]
@@ -518,215 +450,12 @@ impl App {
         self.status_cache_key = None;
     }
 
-    pub(crate) fn open_help(&mut self) {
-        self.help_open = true;
-    }
-
-    pub(crate) fn close_help(&mut self) {
-        self.help_open = false;
-    }
-
-    pub(crate) fn is_help_open(&self) -> bool {
-        self.help_open
-    }
-
-    pub(crate) fn open_path_popup(&mut self) {
-        self.path_popup_open = true;
-    }
-
-    pub(crate) fn close_path_popup(&mut self) {
-        self.path_popup_open = false;
-    }
-
-    pub(crate) fn is_path_popup_open(&self) -> bool {
-        self.path_popup_open
-    }
-
-    pub(crate) fn is_popup_open(&self) -> bool {
-        self.help_open
-            || self.path_popup_open
-            || self.file_picker.open
-            || self.theme_picker.open
-            || self.editor_picker.open
-            || self.is_picker_loading()
-            || self.is_picker_load_failed()
-    }
-
-    pub(crate) fn clear_reload_flash(&mut self) {
-        self.reload_flash = None;
-    }
-
-    pub(crate) fn reload_flash_started(&self) -> Option<Instant> {
-        self.reload_flash
-    }
-
     pub(crate) fn set_editor_config(&mut self, editor: Option<String>) {
         self.editor_config = editor;
     }
 
     pub(crate) fn editor_config(&self) -> Option<&str> {
         self.editor_config.as_deref()
-    }
-
-    pub(crate) fn set_editor_flash(&mut self, flash: EditorFlash) {
-        self.editor_flash = Some((flash, Instant::now()));
-    }
-
-    pub(crate) fn editor_flash(&self) -> Option<&(EditorFlash, Instant)> {
-        self.editor_flash.as_ref()
-    }
-
-    pub(crate) fn clear_editor_flash(&mut self) {
-        self.editor_flash = None;
-    }
-
-    pub(crate) fn toggle_watch(&mut self) {
-        let p = match &self.filepath {
-            None => {
-                self.set_watch_flash(if self.filename == "stdin" {
-                    WatchFlash::Stdin
-                } else {
-                    WatchFlash::NoFile
-                });
-                return;
-            }
-            Some(p) => p,
-        };
-        if !p.exists() {
-            self.set_watch_flash(WatchFlash::FileNotFound);
-            return;
-        }
-        self.watch = !self.watch;
-        self.set_watch_flash(if self.watch {
-            WatchFlash::Activated
-        } else {
-            WatchFlash::Deactivated
-        });
-        if self.watch {
-            self.last_file_state = None;
-            self.last_content_hash = hash_str(&self.source);
-            self.last_hash_check = Some(Instant::now());
-            self.watch_error = false;
-        }
-    }
-
-    pub(crate) fn watch_flash(&self) -> Option<(&WatchFlash, &Instant)> {
-        self.watch_flash.as_ref().map(|(f, t)| (f, t))
-    }
-
-    pub(crate) fn set_watch_flash(&mut self, flash: WatchFlash) {
-        self.watch_flash = Some((flash, Instant::now()));
-    }
-
-    pub(crate) fn watch_flash_for_no_file(&self) -> WatchFlash {
-        if self.filename == "stdin" {
-            WatchFlash::Stdin
-        } else {
-            WatchFlash::NoFile
-        }
-    }
-
-    pub(crate) fn clear_watch_flash(&mut self) {
-        self.watch_flash = None;
-    }
-
-    pub(crate) fn set_config_warning(&mut self, warning: Option<String>) {
-        if let Some(msg) = warning {
-            self.config_flash = Some((msg, Instant::now()));
-        }
-    }
-
-    pub(crate) fn config_flash(&self) -> Option<(&str, &Instant)> {
-        self.config_flash.as_ref().map(|(msg, t)| (msg.as_str(), t))
-    }
-
-    pub(crate) fn clear_config_flash(&mut self) {
-        self.config_flash = None;
-    }
-
-    pub(crate) fn set_link_flash(&mut self, flash: LinkFlash) {
-        self.link_flash = Some((flash, Instant::now()));
-    }
-
-    pub(crate) fn link_flash(&self) -> Option<(&LinkFlash, &Instant)> {
-        self.link_flash.as_ref().map(|(f, t)| (f, t))
-    }
-
-    pub(crate) fn clear_link_flash(&mut self) {
-        self.link_flash = None;
-    }
-
-    pub(crate) fn link_at_position(
-        &self,
-        col: u16,
-        row: u16,
-        padding: u16,
-        sb_width: u16,
-    ) -> Option<&LinkSpan> {
-        self.find_hovered_link(col, row, padding, sb_width)
-            .and_then(|(line_idx, span_idx)| {
-                self.link_spans_by_line
-                    .get(&line_idx)
-                    .and_then(|spans| spans.get(span_idx))
-            })
-    }
-
-    pub(crate) fn find_hovered_link(
-        &self,
-        col: u16,
-        row: u16,
-        padding: u16,
-        sb_width: u16,
-    ) -> Option<(usize, usize)> {
-        let area = self.content_area;
-        let inner_x = area.x + padding;
-        let inner_w = area
-            .width
-            .saturating_sub(padding * 2)
-            .saturating_sub(sb_width);
-
-        if col < inner_x || col >= inner_x + inner_w || row < area.y || row >= area.y + area.height
-        {
-            return None;
-        }
-
-        let rel_col = (col - inner_x) as usize;
-        let rel_row = (row - area.y) as usize;
-        let content_width = inner_w.max(1) as usize;
-
-        let mut visual_row = 0usize;
-        for line_idx in self.scroll..self.total() {
-            let line = &self.lines[line_idx];
-            let line_width: usize = line
-                .spans
-                .iter()
-                .map(|s| display_width(s.content.as_ref()))
-                .sum();
-            let wrapped_lines = if line_width == 0 {
-                1
-            } else {
-                line_width.div_ceil(content_width)
-            };
-
-            if rel_row < visual_row + wrapped_lines {
-                let row_in_wrap = rel_row - visual_row;
-                let char_col = row_in_wrap * content_width + rel_col;
-                if let Some(spans) = self.link_spans_by_line.get(&line_idx) {
-                    if let Some(idx) = spans
-                        .iter()
-                        .position(|ls| char_col >= ls.start_col && char_col < ls.end_col)
-                    {
-                        return Some((line_idx, idx));
-                    }
-                }
-                return None;
-            }
-            visual_row += wrapped_lines;
-            if visual_row > area.height as usize {
-                break;
-            }
-        }
-        None
     }
 
     pub(crate) fn filepath(&self) -> Option<&std::path::Path> {
@@ -747,308 +476,4 @@ impl App {
             })
             .unwrap_or_default()
     }
-
-    pub(crate) fn open_editor_picker(&mut self) {
-        let editors = crate::editor::scan_available_editors();
-        let current = self
-            .editor_config
-            .as_deref()
-            .map(crate::editor::binary_name);
-        let index = current
-            .and_then(|bin| {
-                editors
-                    .iter()
-                    .position(|e| crate::editor::binary_name(&e.command) == bin)
-            })
-            .unwrap_or(0);
-        self.editor_picker.editors = editors;
-        self.editor_picker.index = index;
-        self.editor_picker.open = true;
-    }
-
-    pub(crate) fn close_editor_picker(&mut self) {
-        if let Some(entry) = self.editor_picker.editors.get(self.editor_picker.index) {
-            self.editor_config = Some(entry.command.clone());
-        }
-        self.editor_picker.open = false;
-    }
-
-    pub(crate) fn cancel_editor_picker(&mut self) {
-        self.editor_picker.open = false;
-    }
-
-    pub(crate) fn is_editor_picker_open(&self) -> bool {
-        self.editor_picker.open
-    }
-
-    pub(crate) fn move_editor_picker_up(&mut self) {
-        let len = self.editor_picker.editors.len();
-        if len > 0 {
-            self.editor_picker.index = (self.editor_picker.index + len - 1) % len;
-        }
-    }
-
-    pub(crate) fn move_editor_picker_down(&mut self) {
-        let len = self.editor_picker.editors.len();
-        if len > 0 {
-            self.editor_picker.index = (self.editor_picker.index + 1) % len;
-        }
-    }
-
-    pub(crate) fn editor_picker_index(&self) -> usize {
-        self.editor_picker.index
-    }
-
-    pub(crate) fn editor_picker_entries(&self) -> &[EditorEntry] {
-        &self.editor_picker.editors
-    }
-
-    pub(crate) fn set_last_file_state(&mut self, state: FileState) {
-        self.last_file_state = Some(state);
-    }
-
-    pub(crate) fn max_scroll(&self) -> usize {
-        self.total()
-            .saturating_sub(self.content_area.height as usize)
-    }
-
-    fn reset_numkey_state(&mut self) {
-        self.numkey_cycle = None;
-        self.reverse_mode = false;
-    }
-
-    pub(crate) fn toggle_reverse_mode(&mut self) {
-        self.reverse_mode = !self.reverse_mode;
-    }
-
-    pub(crate) fn scroll_down(&mut self, n: usize) {
-        self.reset_numkey_state();
-        self.scroll = (self.scroll + n).min(self.max_scroll());
-    }
-
-    pub(crate) fn scroll_up(&mut self, n: usize) {
-        self.reset_numkey_state();
-        self.scroll = self.scroll.saturating_sub(n);
-    }
-
-    pub(crate) fn scroll_top(&mut self) {
-        self.reset_numkey_state();
-        self.scroll = 0;
-    }
-
-    pub(crate) fn scroll_bottom(&mut self) {
-        self.reset_numkey_state();
-        self.scroll = self.max_scroll();
-    }
-
-    pub(crate) fn scroll_to(&mut self, position: usize) {
-        self.reset_numkey_state();
-        self.scroll = position.min(self.max_scroll());
-    }
-
-    pub(crate) fn toggle_toc(&mut self) {
-        self.toc_visible = !self.toc_visible;
-    }
-
-    pub(crate) fn request_reload(&mut self, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
-        self.last_file_state = None;
-        self.reload(ss, themes)
-    }
-
-    fn toc_group_for_numkey(&self, key: u8) -> Vec<usize> {
-        let hide_single_h1 = should_hide_single_h1(&self.toc);
-        let promote_h2_root = should_promote_h2_when_no_h1(&self.toc);
-        let mut group = Vec::new();
-        let mut top_level_index = 0u8;
-        let mut collecting = false;
-
-        for (idx, entry) in self.toc.iter().enumerate() {
-            if hide_single_h1 && entry.level == 1 {
-                continue;
-            }
-            let display_level = toc_display_level(entry.level, hide_single_h1, promote_h2_root);
-            if display_level == 1 {
-                if collecting {
-                    break;
-                }
-                top_level_index += 1;
-                if top_level_index == key {
-                    collecting = true;
-                    group.push(idx);
-                }
-            } else if collecting {
-                group.push(idx);
-            }
-        }
-        group
-    }
-
-    pub(crate) fn cycle_numkey(&mut self, key: u8) {
-        let group = self.toc_group_for_numkey(key);
-        if group.is_empty() {
-            return;
-        }
-
-        let direction = if self.reverse_mode {
-            CycleDirection::Backward
-        } else {
-            CycleDirection::Forward
-        };
-
-        let position = match self.numkey_cycle.as_ref().filter(|s| s.key == key) {
-            Some(state) => match direction {
-                CycleDirection::Forward => (state.position + 1) % group.len(),
-                CycleDirection::Backward => (state.position + group.len() - 1) % group.len(),
-            },
-            None => {
-                self.reverse_mode = false;
-                0
-            }
-        };
-
-        self.numkey_cycle = Some(NumkeyCycleState { key, position });
-        self.scroll = self.toc[group[position]].line.min(self.max_scroll());
-    }
-
-    pub(crate) fn scroll_percent(&self) -> u16 {
-        let max = self.max_scroll();
-        if max == 0 {
-            return 100;
-        }
-        ((self.scroll * 100) / max).min(100) as u16
-    }
-
-    pub(crate) fn sync_render_width(
-        &mut self,
-        render_width: usize,
-        ss: &SyntaxSet,
-        themes: &ThemeSet,
-    ) -> bool {
-        let next_width = render_width.max(20);
-        if self.render_width == next_width {
-            return false;
-        }
-        self.render_width = next_width;
-        self.reparse_source(ss, themes);
-        true
-    }
-
-    pub(crate) fn check_modified(&mut self) -> Option<FileChange> {
-        const HASH_FALLBACK_INTERVAL: Duration = Duration::from_secs(2);
-
-        let path = self.filepath.as_ref()?;
-        let state = read_file_state(path)?;
-        match self.last_file_state {
-            Some(prev) if state.modified != prev.modified || state.len != prev.len => {
-                Some(FileChange::Metadata(state))
-            }
-            Some(_) => {
-                let should_hash = self
-                    .last_hash_check
-                    .map(|checked_at| checked_at.elapsed() >= HASH_FALLBACK_INTERVAL)
-                    .unwrap_or(true);
-                if !should_hash {
-                    return None;
-                }
-                self.last_hash_check = Some(Instant::now());
-                let current_hash = hash_file_contents(path).ok()?;
-                (current_hash != self.last_content_hash).then_some(FileChange::Content(state))
-            }
-            None => Some(FileChange::Metadata(state)),
-        }
-    }
-
-    pub(crate) fn reparse_source(&mut self, ss: &SyntaxSet, themes: &ThemeSet) {
-        let theme = current_syntect_theme(themes);
-        let at = app_theme();
-        let old_total = self.total();
-        let (new_lines, new_toc, link_spans) =
-            parse_markdown_with_width(&self.source, ss, theme, self.render_width, &at.markdown);
-        let new_total = new_lines.len();
-
-        if old_total > 0 {
-            self.scroll = ((self.scroll as f64 / old_total as f64) * new_total as f64) as usize;
-            let vh = self.content_area.height as usize;
-            self.scroll = self.scroll.min(new_total.saturating_sub(vh));
-        }
-
-        self.invalidate_theme_preview_cache();
-        self.store_current_theme_preview_from(&new_lines, &new_toc);
-        self.replace_content(new_lines, new_toc, link_spans);
-        if !self.search.query.is_empty() && !self.search.mode {
-            self.run_search();
-        }
-    }
-
-    pub(crate) fn load_path(&mut self, path: PathBuf, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
-        let src = match std::fs::read_to_string(&path) {
-            Ok(src) => src,
-            Err(_) => return false,
-        };
-        let filename = path
-            .file_name()
-            .map(|name| name.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.display().to_string());
-        let file_state = read_file_state(&path);
-        let content_hash = hash_str(&src);
-        let theme = current_syntect_theme(themes);
-        let at = app_theme();
-        let (lines, toc, link_spans) =
-            parse_markdown_with_width(&src, ss, theme, self.render_width, &at.markdown);
-
-        let first_load = self.filepath.is_none();
-        self.filename = filename;
-        self.source = src;
-        self.filepath = Some(path);
-        if first_load && self.watch_from_config {
-            self.watch = true;
-            self.watch_error = false;
-        }
-        self.last_file_state = file_state;
-        self.last_content_hash = content_hash;
-        self.last_hash_check = Some(Instant::now());
-        self.reload_flash = None;
-        self.scroll = 0;
-        self.help_open = false;
-        self.file_picker.open = false;
-        self.theme_picker.open = false;
-        self.search.mode = false;
-        self.reset_search_state();
-        self.invalidate_theme_preview_cache();
-        self.store_current_theme_preview_from(&lines, &toc);
-        self.replace_content(lines, toc, link_spans);
-        true
-    }
-
-    pub(crate) fn reload(&mut self, ss: &SyntaxSet, themes: &ThemeSet) -> bool {
-        self.reset_numkey_state();
-        let path = match &self.filepath {
-            Some(p) => p,
-            None => return false,
-        };
-        let src = match std::fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
-        let file_state = read_file_state(path);
-        let content_hash = hash_str(&src);
-        self.source = src;
-
-        self.reparse_source(ss, themes);
-        self.last_file_state = file_state;
-        self.last_content_hash = content_hash;
-        self.last_hash_check = Some(Instant::now());
-        if self.watch_flash.is_none() {
-            self.reload_flash = Some(Instant::now());
-        }
-        true
-    }
-}
-
-fn link_spans_to_map(link_spans: Vec<LinkSpan>) -> HashMap<usize, Vec<LinkSpan>> {
-    let mut map: HashMap<usize, Vec<LinkSpan>> = HashMap::new();
-    for span in link_spans {
-        map.entry(span.line_idx).or_default().push(span);
-    }
-    map
 }

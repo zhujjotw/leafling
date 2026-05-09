@@ -1,5 +1,6 @@
 mod content;
 mod popup;
+mod popup_picker;
 mod status;
 mod toc;
 
@@ -45,13 +46,13 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     if app.is_help_open() {
         popup::render_help_popup(f, app);
     } else if app.is_picker_loading() || app.is_picker_load_failed() {
-        popup::render_picker_loading_popup(f, app);
+        popup_picker::render_picker_loading_popup(f, app);
     } else if app.is_file_picker_open() {
-        popup::render_file_popup(f, app);
+        popup_picker::render_file_popup(f, app);
     } else if app.is_theme_picker_open() {
         popup::render_theme_popup(f, app);
     } else if app.is_editor_picker_open() {
-        popup::render_editor_popup(f, app);
+        popup_picker::render_editor_popup(f, app);
     } else if app.is_path_popup_open() {
         popup::render_path_popup(f, app);
     }
