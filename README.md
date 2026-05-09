@@ -125,7 +125,32 @@ claude "explain Rust lifetimes" | leaf
 
 # Preview a local file through stdin
 cat TESTING.md | leaf
+```
 
+## Inline Mode
+
+Render Markdown directly to **stdout** without the interactive TUI:
+
+```bash
+# Render to terminal with colors
+leaf --inline README.md
+
+# Force plain text, no ANSI codes (no colors)
+leaf --inline plain README.md
+
+# Force ANSI colors even when piping
+leaf --inline ansi README.md
+
+# Set a specific width
+leaf --inline 60 README.md
+leaf --inline ansi:60 README.md
+
+# Pipe from stdin
+cat README.md | leaf --inline
+
+# Use as a fzf preview
+find . -name '*.md' | fzf --preview 'leaf --inline ansi {}'
+find . -name '*.md' | fzf --preview 'leaf --inline ansi:$FZF_PREVIEW_COLUMNS {}'
 ```
 
 ## Configuration
@@ -161,6 +186,12 @@ Any file can also be opened directly from the command line, regardless of the `e
 
 ```bash
 leaf main.rs
+```
+
+Browse and preview code files with fzf:
+
+```bash
+find . -name '*.rs' | fzf --preview 'leaf --inline ansi {}'
 ```
 
 ## Custom Themes
