@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.21.0](https://github.com/RivoLink/leaf/releases/tag/1.21.0)] - 2026-05-09
+
+### Added
+
+- add --inline stdout rendering ([#115](https://github.com/RivoLink/leaf/pull/115))
+- support extra file types ([#113](https://github.com/RivoLink/leaf/pull/113))
+
 ## [[1.20.2](https://github.com/RivoLink/leaf/releases/tag/1.20.2)] - 2026-05-09
 
 ### Changed
