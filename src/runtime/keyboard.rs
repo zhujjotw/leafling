@@ -84,7 +84,17 @@ pub(super) fn handle_key_event(
             KeyCode::Char('j') | KeyCode::Down if app.is_browser_file_picker() => {
                 app.move_file_picker_down()
             }
+            KeyCode::Char('j')
+                if key.modifiers.contains(KeyModifiers::CONTROL) && app.is_fuzzy_file_picker() =>
+            {
+                app.move_file_picker_down()
+            }
             KeyCode::Char('k') | KeyCode::Up if app.is_browser_file_picker() => {
+                app.move_file_picker_up()
+            }
+            KeyCode::Char('k')
+                if key.modifiers.contains(KeyModifiers::CONTROL) && app.is_fuzzy_file_picker() =>
+            {
                 app.move_file_picker_up()
             }
             KeyCode::Down if app.is_fuzzy_file_picker() => app.move_file_picker_down(),
