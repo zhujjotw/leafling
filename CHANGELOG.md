@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- next-version -->
 
+## [[1.21.1](https://github.com/RivoLink/leaf/releases/tag/1.21.1)] - 2026-05-12
+
+### Docs
+
+- improve readme ui ([#127](https://github.com/RivoLink/leaf/pull/127))
+- add VIM integration instructions for leaf ([#124](https://github.com/RivoLink/leaf/pull/124))
+- enhance README with download badge  ([#117](https://github.com/RivoLink/leaf/pull/117))
+
+### Changed
+
+- Bind another keys for up/down navigation in file picker ([#89](https://github.com/RivoLink/leaf/pull/89))
+
 ## [[1.21.0](https://github.com/RivoLink/leaf/releases/tag/1.21.0)] - 2026-05-09
 
 ### Added
