@@ -127,6 +127,16 @@ claude "explain Rust lifetimes" | leaf
 cat TESTING.md | leaf
 ```
 
+## Vim Integration
+Add the following to your `~/.vimrc` to preview the current Markdown file in a vertical split:
+
+```vim
+" Preview the current Markdown file in a vertical split using leaf
+nnoremap <Leader>md :vertical botright terminal leaf -w %<CR>
+```
+
+Once added, use `\md` to open a live preview. To switch focus back to the Markdown buffer, press `Ctrl+w,h`.
+
 ## Inline Mode
 
 Render Markdown directly to **stdout** without the interactive TUI:
