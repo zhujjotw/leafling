@@ -163,21 +163,48 @@ pub(super) fn handle_open_in_editor(
     };
 
     let emulator = editor::detect_terminal_emulator();
-    let kind = classify(&editor_cmd);
 
-    match open_in_editor(&editor_cmd, &filepath, kind, &emulator) {
+    if let Some(flash) =
+        try_open_editor(&editor_cmd, &filepath, &emulator, terminal, app, ss, themes)?
+    {
+        app.set_editor_flash(flash);
+        return Ok(());
+    }
+
+    if let Some(fallback) = editor::resolve_fallback_editor(&editor_cmd) {
+        if let Some(flash) =
+            try_open_editor(fallback, &filepath, &emulator, terminal, app, ss, themes)?
+        {
+            app.set_editor_flash(flash);
+        }
+    }
+
+    Ok(())
+}
+
+fn try_open_editor(
+    editor_cmd: &str,
+    filepath: &std::path::Path,
+    emulator: &editor::TerminalEmulator,
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    ss: &SyntaxSet,
+    themes: &ThemeSet,
+) -> Result<Option<EditorFlash>> {
+    let kind = classify(editor_cmd);
+    match open_in_editor(editor_cmd, filepath, kind, emulator) {
         Ok(EditorResult::Opened) => {
-            let name = editor::binary_name(&editor_cmd).to_string();
-            app.set_editor_flash(EditorFlash::Opened(name));
+            let name = editor::binary_name(editor_cmd).to_string();
+            Ok(Some(EditorFlash::Opened(name)))
         }
         Ok(EditorResult::NeedsSameTerminal) => {
-            let (bin, args) = split_editor_cmd(&editor_cmd);
+            let (bin, args) = split_editor_cmd(editor_cmd);
             crossterm::terminal::disable_raw_mode()?;
             crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
 
             let status = std::process::Command::new(bin)
                 .args(&args)
-                .arg(&filepath)
+                .arg(filepath)
                 .status();
 
             crossterm::terminal::enable_raw_mode()?;
@@ -185,15 +212,16 @@ pub(super) fn handle_open_in_editor(
             terminal.clear()?;
             app.reload(ss, themes);
 
-            if let Err(e) = status {
-                app.set_editor_flash(EditorFlash::EditorNotFound(format!("{bin}: {e}")));
+            match status {
+                Ok(s) if s.success() => {
+                    let name = editor::binary_name(editor_cmd).to_string();
+                    Ok(Some(EditorFlash::Opened(name)))
+                }
+                _ => Ok(None),
             }
         }
-        Err(msg) => {
-            app.set_editor_flash(EditorFlash::EditorNotFound(msg));
-        }
+        Err(_) => Ok(None),
     }
-    Ok(())
 }
 
 pub(super) fn is_on_scrollbar(area: Rect, col: u16, row: u16) -> bool {

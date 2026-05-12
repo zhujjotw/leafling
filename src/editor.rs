@@ -8,11 +8,12 @@ pub(crate) enum EditorKind {
 }
 
 pub(crate) fn binary_name(editor_cmd: &str) -> &str {
-    let full = Path::new(editor_cmd.split_whitespace().next().unwrap_or(editor_cmd))
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(editor_cmd);
-    full.strip_suffix(".exe").unwrap_or(full)
+    let (bin, _) = split_editor_cmd(editor_cmd);
+    let after_sep = bin
+        .rsplit_once(['/', '\\'])
+        .map(|(_, name)| name)
+        .unwrap_or(bin);
+    after_sep.strip_suffix(".exe").unwrap_or(after_sep)
 }
 
 pub(crate) fn classify(editor_cmd: &str) -> EditorKind {
@@ -24,8 +25,46 @@ pub(crate) fn classify(editor_cmd: &str) -> EditorKind {
 }
 
 pub(crate) fn split_editor_cmd(cmd: &str) -> (&str, Vec<&str>) {
-    let mut parts = cmd.split_whitespace();
-    let bin = parts.next().unwrap_or(cmd);
+    let trimmed = cmd.trim();
+
+    for quote in ['"', '\''] {
+        if trimmed.starts_with(quote) {
+            if let Some(end) = trimmed[1..].find(quote) {
+                let bin = &trimmed[1..=end];
+                let rest = trimmed[end + 2..].trim();
+                let args = if rest.is_empty() {
+                    vec![]
+                } else {
+                    rest.split_whitespace().collect()
+                };
+                return (bin, args);
+            }
+        }
+    }
+
+    if !trimmed.contains(' ') && !trimmed.contains('\t') {
+        return (trimmed, vec![]);
+    }
+
+    let first_space = trimmed.find([' ', '\t']).unwrap_or(trimmed.len());
+    if trimmed[..first_space].contains('\\') {
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        let mut split_at = parts.len();
+        while split_at > 1 && parts[split_at - 1].starts_with('-') {
+            split_at -= 1;
+        }
+        let bin_end = if split_at < parts.len() {
+            parts[split_at].as_ptr() as usize - trimmed.as_ptr() as usize
+        } else {
+            trimmed.len()
+        };
+        let bin = trimmed[..bin_end].trim_end();
+        let args = parts[split_at..].to_vec();
+        return (bin, args);
+    }
+
+    let mut parts = trimmed.split_whitespace();
+    let bin = parts.next().unwrap_or(trimmed);
     let args: Vec<&str> = parts.collect();
     (bin, args)
 }
@@ -175,6 +214,15 @@ fn expand_editor_alias(editor: &str) -> String {
     match editor.trim() {
         "intent" => "termux-open --chooser".to_string(),
         _ => editor.to_string(),
+    }
+}
+
+pub(crate) fn resolve_fallback_editor(editor_cmd: &str) -> Option<&'static str> {
+    let fallback = platform_fallback_editor();
+    if binary_name(editor_cmd) != binary_name(fallback) {
+        Some(fallback)
+    } else {
+        None
     }
 }
 
