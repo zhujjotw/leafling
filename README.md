@@ -11,7 +11,7 @@
   <sub>See more screenshots in the <a href="demo/README.md">features</a> demo</sub>
 </p>
 
-## Install <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/RivoLink/leaf/total" >
+## Install <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/RivoLink/leaf/total?color=5fc894" >
 
 Install the latest published binary.
 
@@ -65,34 +65,6 @@ npm:
 
 ```bash
 npm update -g @rivolink/leaf
-```
-
-## Build
-
-Clone the repository:
-
-```bash
-git clone https://github.com/RivoLink/leaf.git
-cd leaf
-```
-
-Build the release binary locally:
-
-```bash
-cargo build --release
-```
-
-Create a local bin directory if needed and symlink `leaf` into it:
-
-```bash
-mkdir -p ~/.local/bin
-ln -sf "$(pwd)/target/release/leaf" ~/.local/bin/leaf
-```
-
-If `~/.local/bin` is not already on your `PATH`, add it to `~/.bashrc` or `~/.zshrc`:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## Usage
