@@ -331,13 +331,15 @@ impl App {
 
     pub(crate) fn active_toc_index(&self) -> Option<usize> {
         let hide_single_h1 = should_hide_single_h1(&self.toc);
+        let is_visible = |entry: &&TocEntry| !(hide_single_h1 && entry.level == 1);
+
         let mut first_visible = None;
         let mut active = None;
         for (idx, entry) in self
             .toc
             .iter()
             .enumerate()
-            .filter(|(_, entry)| !(hide_single_h1 && entry.level == 1))
+            .filter(|(_, entry)| is_visible(entry))
         {
             if first_visible.is_none() {
                 first_visible = Some((idx, entry.line));
@@ -346,6 +348,17 @@ impl App {
                 break;
             }
             active = Some(idx);
+        }
+
+        let max = self.max_scroll();
+        if max > 0 && self.scroll >= max {
+            let last_visible = self
+                .toc
+                .iter()
+                .enumerate()
+                .rfind(|(_, entry)| is_visible(entry))
+                .map(|(idx, _)| idx);
+            active = last_visible;
         }
 
         let (first_idx, first_line) = first_visible?;

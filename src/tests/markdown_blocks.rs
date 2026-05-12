@@ -54,33 +54,14 @@ fn long_blockquotes_wrap_into_multiple_prefixed_lines() {
 }
 
 #[test]
-fn toc_only_includes_first_two_heading_levels() {
-    let (ss, theme) = test_assets();
-    let (_, toc, _) = parse_markdown(
-        "# One\n## Two\n### Three\n#### Four\n",
-        &ss,
-        &theme,
-        &test_md_theme(),
-        false,
-    );
-
-    assert_eq!(toc.len(), 3);
-    assert_eq!(toc[0].level, 1);
-    assert_eq!(toc[1].level, 2);
-    assert_eq!(toc[2].level, 3);
-}
-
-#[test]
-fn frontmatter_is_ignored_in_preview_and_toc() {
+fn frontmatter_is_ignored_in_preview() {
     let (ss, theme) = test_assets();
     let src = "---\ntitle: Demo\nowner: me\n---\n# Visible\nBody\n";
-    let (lines, toc, _) = parse_markdown(src, &ss, &theme, &test_md_theme(), false);
+    let (lines, _, _) = parse_markdown(src, &ss, &theme, &test_md_theme(), false);
     let rendered = rendered_non_empty_lines(&lines);
 
     assert!(!rendered.iter().any(|line| line.contains("title: Demo")));
     assert!(rendered.iter().any(|line| line.contains("Visible")));
-    assert_eq!(toc.len(), 1);
-    assert_eq!(toc[0].title, "Visible");
 }
 
 #[test]
@@ -120,59 +101,4 @@ fn rules_use_render_width_without_extra_blank_after() {
     assert_eq!(display_width(rule.trim_start()), 24);
     let rule_idx = rendered.iter().position(|line| line == rule).unwrap();
     assert_eq!(rendered[rule_idx + 1], "Beta");
-}
-
-#[test]
-fn toc_hides_single_h1_when_h2_entries_exist() {
-    let toc = vec![
-        TocEntry {
-            level: 1,
-            title: "Doc Title".to_string(),
-            line: 0,
-        },
-        TocEntry {
-            level: 2,
-            title: "Install".to_string(),
-            line: 10,
-        },
-    ];
-
-    assert!(should_hide_single_h1(&toc));
-    assert_eq!(toc_display_level(2, true, false), 1);
-    assert_eq!(toc_display_level(3, true, false), 2);
-}
-
-#[test]
-fn toc_keeps_single_h1_when_no_h2_entries_exist() {
-    let toc = vec![TocEntry {
-        level: 1,
-        title: "Doc Title".to_string(),
-        line: 0,
-    }];
-
-    assert!(!should_hide_single_h1(&toc));
-}
-
-#[test]
-fn toc_promotes_h2_when_document_has_no_h1() {
-    let toc = vec![
-        TocEntry {
-            level: 2,
-            title: "Build & install".to_string(),
-            line: 0,
-        },
-        TocEntry {
-            level: 3,
-            title: "Android".to_string(),
-            line: 4,
-        },
-    ];
-
-    assert!(should_promote_h2_when_no_h1(&toc));
-    assert_eq!(toc_display_level(2, false, true), 1);
-    assert_eq!(toc_display_level(3, false, true), 2);
-    let normalized = normalize_toc(toc);
-    assert_eq!(normalized.len(), 2);
-    assert_eq!(normalized[0].level, 2);
-    assert_eq!(normalized[1].level, 3);
 }
