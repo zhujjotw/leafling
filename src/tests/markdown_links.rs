@@ -223,4 +223,24 @@ fn resolve_syntax_supports_common_language_aliases() {
         resolve_syntax("ps1", &ss).name,
         resolve_syntax("powershell", &ss).name
     );
+
+    for tag in &["kotlin", "toml", "jsx", "dockerfile"] {
+        assert_ne!(
+            resolve_syntax(tag, &ss).name,
+            "Plain Text",
+            "{tag} should not fall back to Plain Text"
+        );
+    }
+    assert_eq!(
+        resolve_syntax("kt", &ss).name,
+        resolve_syntax("kotlin", &ss).name
+    );
+    assert_eq!(
+        resolve_syntax("docker", &ss).name,
+        resolve_syntax("dockerfile", &ss).name
+    );
+    assert_eq!(
+        resolve_syntax("pwsh", &ss).name,
+        resolve_syntax("ps1", &ss).name
+    );
 }
