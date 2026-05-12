@@ -28,6 +28,17 @@ pub(super) fn push_wrapped_prefixed_lines(
         .saturating_sub(first_prefix_width.max(continuation_prefix_width))
         .max(8);
 
+    let total_width: usize = body_spans
+        .iter()
+        .map(|s| display_width(s.content.as_ref()))
+        .sum();
+    if total_width <= max_width {
+        let mut all = first_prefix;
+        all.append(body_spans);
+        lines.push(Line::from(all));
+        return;
+    }
+
     let mut current_prefix = first_prefix.clone();
     let mut next_prefix = continuation_prefix.clone();
     let mut current_width = 0usize;
