@@ -59,9 +59,7 @@ pub(super) fn flush_wrapped_spans(
             render_width,
         );
     } else if !spans.is_empty() {
-        let mut all = block_prefix(false, theme);
-        all.append(spans);
-        lines.push(Line::from(all));
+        push_wrapped_prefixed_lines(lines, spans, vec![], vec![], render_width);
     }
 }
 

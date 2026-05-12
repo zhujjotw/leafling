@@ -16,7 +16,7 @@ fn blockquote_bold_link_preserves_link_color() {
     let theme_colors = &app_theme.markdown;
 
     let bq_line = &lines[0];
-    let link_span = bq_line.spans.iter().find(|s| s.content.as_ref() == "lien");
+    let link_span = bq_line.spans.iter().find(|s| s.content.contains("lien"));
     assert!(link_span.is_some(), "should find 'lien' span");
     let span = link_span.unwrap();
     assert_eq!(
