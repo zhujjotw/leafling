@@ -89,6 +89,79 @@ fn split_editor_cmd_path_with_args() {
 }
 
 #[test]
+fn split_editor_cmd_inner_double_quotes() {
+    let (bin, args) = split_editor_cmd(r#""C:\Program Files\Notepad++\notepad++.exe" --arg"#);
+    assert_eq!(bin, r"C:\Program Files\Notepad++\notepad++.exe");
+    assert_eq!(args, vec!["--arg"]);
+}
+
+#[test]
+fn split_editor_cmd_inner_double_quotes_no_args() {
+    let (bin, args) = split_editor_cmd(r#""C:\Program Files\Notepad++\notepad++.exe""#);
+    assert_eq!(bin, r"C:\Program Files\Notepad++\notepad++.exe");
+    assert!(args.is_empty());
+}
+
+#[test]
+fn split_editor_cmd_inner_single_quotes() {
+    let (bin, args) = split_editor_cmd("'/opt/My Apps/editor' -nw");
+    assert_eq!(bin, "/opt/My Apps/editor");
+    assert_eq!(args, vec!["-nw"]);
+}
+
+#[test]
+fn split_editor_cmd_windows_path_no_args() {
+    let (bin, args) = split_editor_cmd(r"C:\Program Files\Notepad++\notepad++.exe");
+    assert_eq!(bin, r"C:\Program Files\Notepad++\notepad++.exe");
+    assert!(args.is_empty());
+}
+
+#[test]
+fn split_editor_cmd_windows_path_trailing_args() {
+    let (bin, args) = split_editor_cmd(r"C:\Program Files\Notepad++\notepad++.exe --no-session");
+    assert_eq!(bin, r"C:\Program Files\Notepad++\notepad++.exe");
+    assert_eq!(args, vec!["--no-session"]);
+}
+
+#[test]
+fn split_editor_cmd_windows_path_duplicate_trailing_args() {
+    let (bin, args) = split_editor_cmd(r"C:\Program Files\app.exe -nw -nw");
+    assert_eq!(bin, r"C:\Program Files\app.exe");
+    assert_eq!(args, vec!["-nw", "-nw"]);
+}
+
+#[test]
+fn split_editor_cmd_unix_path_with_args() {
+    let (bin, args) = split_editor_cmd("/usr/bin/emacs -nw --no-splash");
+    assert_eq!(bin, "/usr/bin/emacs");
+    assert_eq!(args, vec!["-nw", "--no-splash"]);
+}
+
+#[test]
+fn binary_name_windows_path_with_spaces() {
+    assert_eq!(
+        binary_name(r"C:\Program Files\Notepad++\notepad++.exe"),
+        "notepad++"
+    );
+}
+
+#[test]
+fn binary_name_quoted_windows_path() {
+    assert_eq!(
+        binary_name(r#""C:\Program Files\Notepad++\notepad++.exe" --arg"#),
+        "notepad++"
+    );
+}
+
+#[test]
+fn classify_windows_path_with_spaces() {
+    assert_eq!(
+        classify(r"C:\Program Files\Notepad++\notepad++.exe"),
+        EditorKind::Gui
+    );
+}
+
+#[test]
 fn resolve_editor_cli_takes_priority() {
     let result = resolve_editor(Some("vim"), None);
     assert_eq!(result, "vim");

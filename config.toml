@@ -28,6 +28,13 @@ theme = "ocean"
 # Default editor for Ctrl+E
 # Any editor name available in PATH: nano, vim, nvim, micro,
 # helix, emacs, code, subl, gedit, kate, mousepad, zed, etc.
+#
+# For paths with spaces, just write the path:
+# editor = 'C:\Program Files\Notepad++\notepad++.exe'
+#
+# For paths with spaces AND arguments, use inner quotes:
+# editor = '"C:\Program Files\Notepad++\notepad++.exe" --some-flag'
+#
 # Falls back to: LEAF_EDITOR > VISUAL > EDITOR > nano (notepad on Windows)
 # editor = "nano"
 

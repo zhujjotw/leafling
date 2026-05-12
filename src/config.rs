@@ -91,14 +91,24 @@ fn write_default_config(dest: &Path) -> anyhow::Result<()> {
 fn open_config_in_editor(path: &Path) -> anyhow::Result<()> {
     let (config, _) = load_config();
     let editor = crate::editor::resolve_editor(None, config.editor.as_deref());
-    let (bin, args) = crate::editor::split_editor_cmd(&editor);
-    let status = std::process::Command::new(bin)
+
+    if try_launch_editor(&editor, path) {
+        return Ok(());
+    }
+
+    if let Some(fallback) = crate::editor::resolve_fallback_editor(&editor) {
+        try_launch_editor(fallback, path);
+    }
+
+    Ok(())
+}
+
+fn try_launch_editor(editor: &str, path: &Path) -> bool {
+    let (bin, args) = crate::editor::split_editor_cmd(editor);
+    std::process::Command::new(bin)
         .args(args)
         .arg(path)
         .status()
-        .with_context(|| format!("Cannot open editor: {bin}"))?;
-    if !status.success() {
-        anyhow::bail!("Editor exited with status: {status}");
-    }
-    Ok(())
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
