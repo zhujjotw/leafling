@@ -24,6 +24,7 @@ mod markdown_lists;
 mod markdown_tables;
 mod render;
 mod theme;
+mod toc;
 mod update;
 
 pub(super) static THEME_TEST_MUTEX: Mutex<()> = Mutex::new(());
