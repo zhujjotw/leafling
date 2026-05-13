@@ -76,18 +76,17 @@ impl App {
         let (tx, rx) = mpsc::channel();
         self.translation.receiver = Some(rx);
 
-        // Build provider
-        let config = &self.translation_config;
-        let provider_type = config.provider.as_deref().unwrap_or("deepl");
-        let endpoint = config.api_endpoint.as_deref().unwrap_or("").to_string();
-        let api_key = config.api_key.as_deref().unwrap_or("").to_string();
-        let source_lang = config.source_lang().to_string();
-        let target_lang = config.target_lang().to_string();
+        // Clone all data needed by the thread before spawning
+        let provider_type = self.translation_config.provider.clone().unwrap_or_else(|| "deepl".to_string());
+        let endpoint = self.translation_config.api_endpoint.clone().unwrap_or_default();
+        let api_key = self.translation_config.api_key.clone().unwrap_or_default();
+        let source_lang = self.translation_config.source_lang().to_string();
+        let target_lang = self.translation_config.target_lang().to_string();
         let cancel_flag = self.translation.cancel_flag.clone();
         let existing_cache = self.translation.cache.clone();
 
         thread::spawn(move || {
-            let provider = build_provider(provider_type, &endpoint, &api_key);
+            let provider = build_provider(&provider_type, &endpoint, &api_key);
             let mut cache = existing_cache;
 
             for (idx, segment) in uncached.iter().enumerate() {

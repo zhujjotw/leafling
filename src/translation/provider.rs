@@ -131,6 +131,7 @@ impl TranslationProvider for LLMProvider {
             .and_then(|m| m.get("content"))
             .and_then(|c| c.as_str())
             .map(|s| s.trim().to_string())
+            .map(|s| s.trim_start_matches("\\n").to_string())
             .context("LLM response missing translation text")
     }
 }
@@ -146,7 +147,7 @@ pub(crate) fn build_provider(
             let model = if api_endpoint.contains("openai") {
                 "gpt-4o-mini".to_string()
             } else {
-                "default".to_string()
+                "Qwen3-32B".to_string()
             };
             Box::new(LLMProvider::new(
                 api_endpoint.to_string(),

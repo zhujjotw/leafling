@@ -22,7 +22,6 @@ pub(crate) fn extract_segments(source: &str) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut current_text = String::new();
     let mut in_code = false;
-    let mut in_table = false;
     let mut current_kind: Option<SegmentKind> = None;
     let mut code_lang = String::new();
 
@@ -44,10 +43,9 @@ pub(crate) fn extract_segments(source: &str) -> Vec<Segment> {
             }
             Event::Start(Tag::Table(_)) => {
                 flush_segment(&mut current_text, &mut current_kind, &mut segments);
-                in_table = true;
             }
             Event::End(TagEnd::Table) => {
-                in_table = false;
+                // Tables are skipped
             }
             Event::Start(Tag::Heading { level, .. }) => {
                 flush_segment(&mut current_text, &mut current_kind, &mut segments);
@@ -104,9 +102,9 @@ pub(crate) fn extract_segments(source: &str) -> Vec<Segment> {
             Event::End(TagEnd::Strong) => {
                 current_text.push_str("**");
             }
-            Event::Start(Tag::Link { dest, title, .. }) => {
+            Event::Start(Tag::Link { dest_url, title, .. }) => {
                 current_text.push('[');
-                let _ = (dest, title);
+                let _ = (dest_url, title);
             }
             Event::End(TagEnd::Link) => {
                 // Link text is already captured via Text events.
