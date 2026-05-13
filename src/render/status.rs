@@ -1,5 +1,5 @@
 use crate::{
-    app::{App, EditorFlash, LinkFlash, WatchFlash, FLASH_DURATION_MS},
+    app::{App, EditorFlash, LinkFlash, TranslationFlash, WatchFlash, FLASH_DURATION_MS},
     theme::app_theme,
 };
 use ratatui::{
@@ -146,7 +146,7 @@ pub(crate) fn status_hint_segments(app: &App) -> &'static [&'static str] {
     } else if app.has_active_search() {
         &["n/N next/prev", "esc cancel"]
     } else {
-        &["ctrl+e edit", "ctrl+f find", "t toc", "? help", "q quit"]
+        &["ctrl+e edit", "ctrl+f find", "ctrl+t translate", "t toc", "? help", "q quit"]
     }
 }
 
@@ -229,6 +229,57 @@ fn link_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
     Some(vec![Span::styled(text, Style::default().fg(fg).bg(bar_bg))])
 }
 
+fn translation_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
+    let (flash, started) = app.translation_flash()?;
+    if started.elapsed() >= std::time::Duration::from_millis(FLASH_DURATION_MS) {
+        return None;
+    }
+    let theme = app_theme();
+    let bar_bg = status_bar_bg();
+    let (text, fg): (String, Color) = match flash {
+        TranslationFlash::Activated => (" Translation activated ".to_string(), theme.ui.status_success_fg),
+        TranslationFlash::Deactivated => (" Translation deactivated ".to_string(), theme.ui.status_warning_fg),
+        TranslationFlash::NotConfigured => {
+            (" Translation not configured ".to_string(), theme.ui.status_error_fg)
+        }
+        TranslationFlash::Error(msg) => (
+            format!(" Translation error: {msg} "),
+            theme.ui.status_error_fg,
+        ),
+    };
+    Some(vec![Span::styled(text, Style::default().fg(fg).bg(bar_bg))])
+}
+
+pub(crate) fn status_translation_section(app: &App) -> Option<Vec<Span<'static>>> {
+    if !app.is_translation_enabled() {
+        return None;
+    }
+    let theme = app_theme();
+    match app.translation_status() {
+        crate::translation::TranslationStatus::Idle => None,
+        crate::translation::TranslationStatus::Loading { completed, total } => Some(vec![
+            Span::styled(
+                format!(" ☰ {}/{} ", completed, total),
+                Style::default()
+                    .fg(theme.ui.status_search_fg)
+                    .bg(theme.ui.status_search_bg),
+            ),
+        ]),
+        crate::translation::TranslationStatus::Done => Some(vec![Span::styled(
+            " ☰ translated ",
+            Style::default()
+                .fg(theme.ui.status_success_fg)
+                .bg(theme.ui.status_success_bg),
+        )]),
+        crate::translation::TranslationStatus::Error(_) => Some(vec![Span::styled(
+            " ☰ error ",
+            Style::default()
+                .fg(theme.ui.status_error_fg)
+                .bg(theme.ui.status_error_bg),
+        )]),
+    }
+}
+
 pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
     let bar_bg = status_bar_bg();
     let outer_separator = Span::raw(" ");
@@ -257,6 +308,12 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
         return join_span_sections(vec![left], outer_separator);
     }
 
+    if let Some(flash_section) = translation_flash_section(app) {
+        let mut left = status_brand_section();
+        left.extend(flash_section);
+        return join_span_sections(vec![left], outer_separator);
+    }
+
     let mut left_section = status_brand_section();
     left_section.extend(status_filename_section(app.filename()));
 
@@ -269,6 +326,10 @@ pub(crate) fn build_status_bar(app: &App, pct: u16) -> Vec<Span<'static>> {
         if let Some(section) = status_watch_section(app) {
             left_section.extend(section);
         }
+    }
+
+    if let Some(section) = status_translation_section(app) {
+        left_section.extend(section);
     }
 
     let mut sections = vec![left_section, status_shortcuts_section(app, bar_bg)];

@@ -149,6 +149,10 @@ impl App {
         if !self.search.query.is_empty() && !self.search.mode {
             self.run_search();
         }
+        if self.translation.enabled {
+            self.translation.invalidate();
+            self.start_translation();
+        }
     }
 
     pub(crate) fn check_modified(&mut self) -> Option<FileChange> {

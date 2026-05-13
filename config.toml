@@ -49,3 +49,11 @@ watch = false
 # Text files (txt, csv, log...) are rendered as plain Markdown.
 # Default: [] (Markdown only)
 # extras = ["txt", "csv", "rs", "java", "json", "yaml"]
+
+# Translation settings (optional, not configured = translation disabled)
+# [translation]
+# provider = "deepl"                     # "deepl" or "llm"
+# api_endpoint = "https://api-free.deepl.com/v2/translate"
+# api_key = ""                            # your API key
+# source_lang = "EN"
+# target_lang = "ZH"

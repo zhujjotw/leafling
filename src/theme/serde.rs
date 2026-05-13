@@ -164,6 +164,8 @@ theme_overrides!(MarkdownThemeOverrides for MarkdownTheme {
     mermaid_arrow,
     mermaid_label,
     mermaid_block_fg,
+    translation_text,
+    translation_separator,
 });
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]

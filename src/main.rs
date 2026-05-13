@@ -16,6 +16,7 @@ mod terminal;
 #[cfg(test)]
 mod tests;
 mod theme;
+mod translation;
 mod update;
 
 use app::{App, AppConfig};
@@ -262,6 +263,7 @@ fn main() -> Result<()> {
     app.set_file_mode(file_mode);
     app.set_editor_config(Some(resolved_editor));
     app.set_config_warning(config_warning);
+    app.set_translation_config(user_config.translation);
     if let Some(dir) = open_browser_picker_dir {
         app.queue_file_picker(dir);
     }

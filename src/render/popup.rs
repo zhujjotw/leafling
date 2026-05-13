@@ -176,6 +176,9 @@ pub(super) fn render_help_popup(f: &mut Frame, _app: &App) {
         Line::from(vec![
             Span::styled("t          ", key_style),
             Span::styled("toggle toc", text_style),
+            Span::raw("     "),
+            Span::styled("Ctrl+T     ", key_style),
+            Span::styled("translate", text_style),
         ]),
         Line::from(""),
         popup_footer_line(&["esc close", "? close"], theme.ui.toc_bg),

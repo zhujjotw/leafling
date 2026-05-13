@@ -12,12 +12,37 @@ const DEFAULT_CONFIG: &str = include_str!("../config.toml");
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
+pub(crate) struct TranslationConfig {
+    pub(crate) provider: Option<String>,
+    pub(crate) api_endpoint: Option<String>,
+    pub(crate) api_key: Option<String>,
+    pub(crate) source_lang: Option<String>,
+    pub(crate) target_lang: Option<String>,
+}
+
+impl TranslationConfig {
+    pub(crate) fn is_configured(&self) -> bool {
+        self.provider.is_some() && self.api_endpoint.is_some() && self.api_key.is_some()
+    }
+
+    pub(crate) fn source_lang(&self) -> &str {
+        self.source_lang.as_deref().unwrap_or("EN")
+    }
+
+    pub(crate) fn target_lang(&self) -> &str {
+        self.target_lang.as_deref().unwrap_or("ZH")
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 pub(crate) struct LeafConfig {
     pub(crate) theme: Option<String>,
     pub(crate) editor: Option<String>,
     pub(crate) watch: Option<bool>,
     pub(crate) extras: Vec<String>,
     pub(crate) themes: BTreeMap<String, CustomThemeConfig>,
+    pub(crate) translation: TranslationConfig,
     #[serde(skip)]
     pub(crate) config_dir: Option<PathBuf>,
 }

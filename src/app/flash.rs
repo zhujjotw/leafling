@@ -27,6 +27,14 @@ pub(crate) enum LinkFlash {
     CopyFailed,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TranslationFlash {
+    Activated,
+    Deactivated,
+    NotConfigured,
+    Error(String),
+}
+
 impl App {
     pub(crate) fn set_editor_flash(&mut self, flash: EditorFlash) {
         self.editor_flash = Some((flash, Instant::now()));
@@ -122,5 +130,17 @@ impl App {
 
     pub(crate) fn reload_flash_started(&self) -> Option<Instant> {
         self.reload_flash
+    }
+
+    pub(crate) fn set_translation_flash(&mut self, flash: TranslationFlash) {
+        self.translation_flash = Some((flash, Instant::now()));
+    }
+
+    pub(crate) fn translation_flash(&self) -> Option<(&TranslationFlash, &Instant)> {
+        self.translation_flash.as_ref().map(|(f, t)| (f, t))
+    }
+
+    pub(crate) fn clear_translation_flash(&mut self) {
+        self.translation_flash = None;
     }
 }

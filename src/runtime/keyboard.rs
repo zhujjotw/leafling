@@ -229,6 +229,9 @@ pub(super) fn handle_key_event(
             KeyCode::Char('u') | KeyCode::PageUp => app.scroll_up(20),
             KeyCode::Char('g') | KeyCode::Home => app.scroll_top(),
             KeyCode::Char('G') | KeyCode::End => app.scroll_bottom(),
+            KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.toggle_translation();
+            }
             KeyCode::Char('t') => app.toggle_toc(),
             KeyCode::Char('T') => {
                 app.open_theme_picker();

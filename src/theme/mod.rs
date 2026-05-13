@@ -110,6 +110,8 @@ pub(crate) struct MarkdownTheme {
     pub(crate) mermaid_arrow: Color,
     pub(crate) mermaid_label: Color,
     pub(crate) mermaid_block_fg: Color,
+    pub(crate) translation_text: Color,
+    pub(crate) translation_separator: Color,
 }
 
 pub(crate) const DEFAULT_PRESET: ThemePreset = ThemePreset::OceanDark;

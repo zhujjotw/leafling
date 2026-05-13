@@ -6,6 +6,7 @@ use crate::{
     },
     render::{build_status_bar, build_toc_line_with_index, toc_header_line},
     theme::{app_theme, current_theme_selection, theme_preset_index},
+    translation::TranslationState,
 };
 use ratatui::{layout::Rect, text::Line};
 use std::{
@@ -29,12 +30,14 @@ mod content;
 pub(crate) use content::{FileChange, FileState};
 
 mod flash;
-pub(crate) use flash::{EditorFlash, LinkFlash, WatchFlash, FLASH_DURATION_MS};
+pub(crate) use flash::{EditorFlash, LinkFlash, TranslationFlash, WatchFlash, FLASH_DURATION_MS};
 
 mod popups;
 pub(crate) use popups::EditorPickerState;
 
 mod links;
+
+mod translation;
 
 mod io_picker;
 
@@ -60,6 +63,8 @@ pub(crate) struct StatusCacheKey {
     watch_error: bool,
     config_flash_active: bool,
     link_flash_active: bool,
+    translation_enabled: bool,
+    translation_flash_active: bool,
 }
 
 pub(crate) struct AppConfig {
@@ -113,10 +118,13 @@ pub(crate) struct App {
     pub(crate) link_spans_by_line: HashMap<usize, Vec<LinkSpan>>,
     pub(crate) hovered_link: Option<(usize, usize)>,
     link_flash: Option<(LinkFlash, Instant)>,
+    translation_flash: Option<(TranslationFlash, Instant)>,
     pub(crate) last_click: Option<(u16, u16, Instant)>,
     numkey_cycle: Option<NumkeyCycleState>,
     reverse_mode: bool,
     pub(super) file_mode: bool,
+    pub(super) translation: TranslationState,
+    pub(super) translation_config: crate::config::TranslationConfig,
 }
 
 impl App {
@@ -246,6 +254,9 @@ impl App {
             numkey_cycle: None,
             reverse_mode: false,
             file_mode: false,
+            translation: TranslationState::new(),
+            translation_flash: None,
+            translation_config: crate::config::TranslationConfig::default(),
         };
         app.store_current_theme_preview();
         app.refresh_static_caches();
@@ -291,6 +302,11 @@ impl App {
     // Always >= 5 (scroll padding).
     // Use has_content() to check for actual content.
     pub(crate) fn total(&self) -> usize {
+        if self.translation.enabled {
+            if let Some(ref bl) = self.translation.bilingual_lines {
+                return bl.len();
+            }
+        }
         self.lines.len()
     }
 
@@ -299,6 +315,11 @@ impl App {
     }
 
     pub(crate) fn visible_lines(&self, start: usize, end: usize) -> &[Line<'static>] {
+        if self.translation.enabled {
+            if let Some(ref bl) = self.translation.bilingual_lines {
+                return &bl[start..end];
+            }
+        }
         &self.lines[start..end]
     }
 
@@ -457,6 +478,12 @@ impl App {
                 .as_ref()
                 .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
                 .unwrap_or(false),
+            translation_enabled: self.translation.enabled,
+            translation_flash_active: self
+                .translation_flash
+                .as_ref()
+                .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
+                .unwrap_or(false),
         };
 
         if self.status_cache_key.as_ref() == Some(&cache_key) {
@@ -499,5 +526,25 @@ impl App {
                     .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             })
             .unwrap_or_default()
+    }
+
+    pub(crate) fn is_translation_enabled(&self) -> bool {
+        self.translation.enabled
+    }
+
+    pub(crate) fn translation_status(&self) -> &crate::translation::TranslationStatus {
+        &self.translation.status
+    }
+
+    pub(crate) fn translation_cache_len(&self) -> usize {
+        self.translation.cache.len()
+    }
+
+    pub(crate) fn set_translation_config(&mut self, config: crate::config::TranslationConfig) {
+        self.translation_config = config;
+    }
+
+    pub(crate) fn translation_receiver_active(&self) -> bool {
+        self.translation.receiver.is_some()
     }
 }

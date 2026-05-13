@@ -1,314 +1,173 @@
 <p align="center">
-  <img src="images/logo-wordmark.svg" alt="leaf" width="360" />
+  <img src="images/logo-wordmark.svg" alt="leafling" width="360" />
 </p>
 
 <p align="center">
-  Terminal Markdown previewer — GUI-like experience.
+  Terminal Markdown previewer with bilingual translation.<br>
+  <em>Read English docs in Chinese — right in your terminal.</em>
 </p>
 
 <p align="center">
-  <img src="images/preview.png" alt="leaf" width="710px" /><br>
-  <sub>See more screenshots in the <a href="demo/README.md">features</a> demo</sub>
+  <a href="https://github.com/RivoLink/leaf"><img src="https://img.shields.io/badge/fork-leaf-blue" alt="fork"></a>
+  <img src="https://img.shields.io/badge/language-Rust-orange" alt="rust">
+  <img src="https://img.shields.io/badge/translation-DeepL%20%7C%20LLM-green" alt="translation">
 </p>
 
-## Install <img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/RivoLink/leaf/total?color=5fc894" >
+---
 
-Install the latest published binary.
+## Why leafling?
 
-macOS / Linux / Android / Termux:
+### The Pain Point
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.sh | sh
+As a Chinese developer, you constantly encounter excellent English documentation — READMEs, RFCs, design docs, API references. You want to read them, but:
+
+- **Switching between the doc and a browser translator** breaks your flow. You lose context every time you switch windows.
+- **Browser translators mangle code blocks and markdown formatting**, making technical docs unreadable.
+- **You already live in the terminal**. Your editor, your git, your build tools are all there. Why leave it just to read a doc?
+- **Existing terminal readers only show the original text**. You're stuck copy-pasting paragraphs into translation tools.
+
+You end up either reading slowly with a dictionary, or giving up on the doc entirely.
+
+### The Solution
+
+**leafling** adds real-time bilingual translation to [leaf](https://github.com/RivoLink/leaf), a beautiful terminal Markdown previewer. One keyboard shortcut turns any English Markdown document into a side-by-side English-Chinese reading experience — without ever leaving your terminal.
+
+Press `Ctrl+T` — the document transforms:
+
+```
+## Getting Started                  ## Getting Started
+
+Install the dependencies:           Install the dependencies:
+
+                                    > 译文：安装依赖项：
+
+                                    > 接下来，运行开发服务器...
+
+Next, run the dev server:           Next, run the dev server:
 ```
 
-Windows:
+Key design decisions:
 
-```powershell
-irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
-```
+- **Original text always visible** — translations appear below each paragraph, not replacing it. You can compare and verify.
+- **Markdown formatting preserved** — bold, italic, links, and code are translated in context, not broken.
+- **Paragraph-level caching** — each paragraph is translated once and cached. Toggling translation on/off is instant.
+- **Background translation** — the UI stays responsive while translations load. You see progress in the status bar.
+- **Multiple providers** — supports DeepL API and OpenAI-compatible LLM endpoints. Use whichever you have.
 
-npm:
+## Features (inherited from leaf)
 
-```bash
-npm install -g @rivolink/leaf
-```
+- Live preview with auto-reload (watch mode)
+- Syntax highlighting for code blocks
+- LaTeX/Math rendering
+- Mermaid diagram support
+- Table rendering with Unicode borders
+- Table of Contents sidebar
+- Full-text search with highlighting
+- Multiple color themes (Arctic, Forest, Ocean, Solarized)
+- File picker with fuzzy matching
+- Editor integration (Ctrl+E)
+- Mouse support
 
-ArchLinux (AUR):
+## Install
 
-Use an [AUR helper](https://wiki.archlinux.org/title/AUR_helpers), such as `yay`:
-
-```bash
-yay -S leaf-markdown-viewer
-```
-
-Verify the installation:
-
-```bash
-leaf --version
-```
-
-## Update
-
-Update an existing installation to the latest published release.
-
-Self:
+From source (requires [Rust](https://rustup.rs)):
 
 ```bash
-leaf --update
+git clone https://github.com/zhujjotw/leafling.git
+cd leafling
+cargo build --release
+cp target/release/leafling /usr/local/bin/
 ```
 
-`leaf --update` downloads the matching published asset, verifies it against the published `checksums.txt` SHA256, and then installs it.
+## Configuration
 
-On Windows, if replacing the running `.exe` is blocked by the OS, rerun the PowerShell installer from the install section.
+Create or edit the config file:
 
-npm:
+- Linux / macOS: `~/.config/leafling/config.toml`
+- Windows: `%APPDATA%\leafling\config.toml`
 
-```bash
-npm update -g @rivolink/leaf
+### Translation setup
+
+```toml
+[translation]
+# Required: choose a provider
+provider = "deepl"          # "deepl" or "llm"
+
+# DeepL (free tier)
+api_endpoint = "https://api-free.deepl.com/v2/translate"
+api_key = "your-deepl-api-key"
+
+# Or use an LLM provider (OpenAI-compatible)
+# provider = "llm"
+# api_endpoint = "https://api.openai.com/v1/chat/completions"
+# api_key = "your-openai-api-key"
+
+# Language settings (optional, defaults shown)
+source_lang = "EN"
+target_lang = "ZH"
+```
+
+Without the `[translation]` section, leafling works exactly like leaf — press `Ctrl+T` and it will tell you translation is not configured.
+
+### Full config example
+
+```toml
+theme = "ocean"
+watch = false
+
+[translation]
+provider = "deepl"
+api_endpoint = "https://api-free.deepl.com/v2/translate"
+api_key = "your-key"
+source_lang = "EN"
+target_lang = "ZH"
 ```
 
 ## Usage
 
 ```bash
-# Open a Markdown file
-leaf TESTING.md
+# Preview a file
+leafling README.md
 
-# Watch mode — reloads automatically on save
-leaf --watch TESTING.md
-leaf -w TESTING.md
-
-# Open the fuzzy Markdown picker
-leaf
-
-# Open the classic directory browser picker
-leaf --picker
-
-# Open the fuzzy Markdown picker, then watch the selected file
-leaf -w
-
-# Open the classic directory browser picker, then watch the selected file
-leaf -w --picker
-
-# Open a dash-prefixed filename
-leaf -- -notes.md
-
-# Stream Markdown from another CLI tool
-claude "explain Rust lifetimes" | leaf
-
-# Preview a local file through stdin
-cat TESTING.md | leaf
+# Preview with translation (press Ctrl+T to toggle)
+leafling README.md
 ```
 
-## Vim Integration
-Add the following to your `~/.vimrc` to preview the current Markdown file in a vertical split:
-
-```vim
-" Preview the current Markdown file in a vertical split using leaf
-nnoremap <Leader>md :vertical botright terminal leaf -w %<CR>
-```
-
-Once added, use `\md` to open a live preview. To switch focus back to the Markdown buffer, press `Ctrl+w,h`.
-
-## Inline Mode
-
-Render Markdown directly to **stdout** without the interactive TUI:
-
-```bash
-# Render to terminal with colors
-leaf --inline README.md
-
-# Force plain text, no ANSI codes (no colors)
-leaf --inline plain README.md
-
-# Force ANSI colors even when piping
-leaf --inline ansi README.md
-
-# Set a specific width
-leaf --inline 60 README.md
-leaf --inline ansi:60 README.md
-
-# Pipe from stdin
-cat README.md | leaf --inline
-
-# Use as a fzf preview
-find . -name '*.md' | fzf --preview 'leaf --inline ansi {}'
-find . -name '*.md' | fzf --preview 'leaf --inline ansi:$FZF_PREVIEW_COLUMNS {}'
-```
-
-## Configuration
-
-Set default values for theme, editor, and watch mode via `config.toml`:
-
-```bash
-leaf --config
-```
-
-This opens the configuration file in your editor. If the file does not exist yet, leaf creates it with documented defaults.
-
-```toml
-theme = "ocean"          # arctic, forest, ocean, solarized-dark, or a custom theme file
-editor = "nano"          # any editor in PATH
-watch = false            # auto-reload when opening a file
-extras = ["txt", "rs"]   # extra file types shown in the picker
-```
-
-All settings are optional. CLI arguments always take priority. See [`config.toml`](config.toml) for details.
-
-## Extra Files
-
-Non-Markdown files can be listed in the file picker by adding their extensions to `config.toml`:
-
-```toml
-extras = ["txt", "csv", "rs", "java", "json", "yaml"]
-```
-
-Code files get syntax highlighting; text files are rendered as plain Markdown.
-
-Any file can also be opened directly from the command line, regardless of the `extras` setting:
-
-```bash
-leaf main.rs
-```
-
-Browse and preview code files with fzf:
-
-```bash
-find . -name '*.rs' | fzf --preview 'leaf --inline ansi {}'
-```
-
-## Custom Themes
-
-Create a `.toml` file that inherits from a built-in theme and overrides specific colors:
-
-```toml
-theme = "/path/to/custom-theme.toml"
-```
-
-Relative paths are resolved from the config file directory.
-
-```toml
-# custom-theme.toml
-base = "ocean"
-syntax = "base16-ocean.dark"
-
-[ui]
-content_bg = "#282828"
-toc_accent = "#fe8019"
-
-[markdown]
-text = "#ebdbb2"
-heading_1 = "#fabd2f"
-```
-
-See [`gruvbox.toml`](gruvbox.toml) for a complete example with all available color keys.
-
-## Keybindings
+### Keyboard shortcuts
 
 | Key | Action |
-|---|---|
-| `j` / `↓` | Scroll down |
-| `k` / `↑` | Scroll up |
-| `d` / PgDn | Page down (20 lines) |
-| `u` / PgUp | Page up (20 lines) |
-| `g` / Home | Top |
-| `G` / End | Bottom |
-| `t` | Toggle TOC sidebar |
-| `Shift+Sel` | Select text |
-| `Shift+T` | Open theme picker |
-| `Shift+E` | Open editor picker |
-| `Shift+P` | Open file browser |
+|-----|--------|
+| `Ctrl+T` | Toggle bilingual translation |
+| `j/k`, `Up/Down` | Scroll |
+| `PgUp/PgDn` | Page scroll |
+| `g/G` | Jump to top/bottom |
+| `t` | Toggle table of contents |
+| `Ctrl+F`, `/` | Search |
+| `n/N` | Next/previous search match |
+| `Ctrl+W`, `w` | Toggle watch mode |
 | `Ctrl+E` | Open in editor |
-| `Ctrl+P` | Open fuzzy picker |
-| `Ctrl+F` / `/` | Find |
-| `n` / `N` | Next / prev match |
-| `?` | Show help popup |
-| `r` | Force reload (watch mode) |
+| `Shift+T` | Theme picker |
+| `Ctrl+P` | File picker (fuzzy) |
+| `Shift+P` | File browser |
+| `p` | Show file path |
+| `?` | Help |
 | `q` | Quit |
 
-## Features
+## Architecture
 
-- **Live preview** — Watch mode with automatic reload and visual feedback.
-- **File picker** — Fuzzy Markdown picker, directory browser, and watch after selection.
-- **Editor integration** — Open the current file in your preferred editor.
-- **Frontmatter support** — YAML frontmatter rendered as a table (horizontal or vertical based on key count).
-- **Rich Markdown rendering** — Tables, lists, blockquotes, rules, bold, italic, and strikethrough.
-- **Extra file types** — Open any file; code files get syntax highlighting, text files render as Markdown.
-- **Syntax highlighting** — Common aliases like `py`, `cpp`, `json`, `toml`, `ps1`, `dockerfile`.
-- **LaTeX support** — Inline, block, and `latex` / `tex` code blocks rendered as formulas.
-- **Navigation** — TOC sidebar, active section tracking, heading jumps, and search.
-- **Terminal UX** — Theme picker, help popup, file path popup, mouse and keyboard support.
-- **CLI friendly** — stdin support and `leaf --update` with SHA256 verification.
+Translation is implemented as an independent module (`src/translation/`) with four components:
 
-## Typical AI Workflow
+- **provider.rs** — Translation provider trait with DeepL and LLM implementations
+- **segment.rs** — Extracts translatable segments (headings, paragraphs, list items) from Markdown, skipping code blocks and math
+- **render.rs** — Builds bilingual display by interleaving original and translated content
+- **mod.rs** — State management, background thread coordination, caching
 
-```bash
-# Terminal 1: generate the file
-aichat "..." > notes.md
+Translations run in a background thread using `mpsc` channels (same pattern as leaf's file picker), keeping the UI responsive.
 
-# Terminal 2: live watch
-leaf --watch notes.md
-```
+## Acknowledgments
 
-## Troubleshooting
-
-### Windows: missing Visual C++ runtime
-
-If `leaf.exe` does not start on Windows and reports a missing MSVC runtime, install the latest supported Microsoft Visual C++ Redistributable from Microsoft Learn:
-
-- https://learn.microsoft.com/fr-fr/cpp/windows/latest-supported-vc-redist?view=msvc-170
-
-Direct download for the latest supported **X64** Microsoft Visual C++ Redistributable:
-
-- https://aka.ms/vc14/vc_redist.x64.exe
-
-For `leaf-windows-x86_64.exe`, the relevant package is the latest supported **X64** Visual C++ v14 Redistributable.
-
-### Windows: update or file replacement error
-
-If `leaf --update` fails on Windows with an error about replacing, renaming, or writing `leaf.exe`, the running executable was likely locked by the OS.
-
-Close any terminal session still running `leaf`, then rerun the PowerShell installer from the install section:
-
-```powershell
-irm https://raw.githubusercontent.com/RivoLink/leaf/main/scripts/install.ps1 | iex
-```
-
-## Uninstall
-
-macOS / Linux / Android / Termux:
-
-```bash
-rm -f ~/.local/bin/leaf
-```
-
-Windows:
-
-```powershell
-Remove-Item "$env:LOCALAPPDATA\Programs\leaf\leaf.exe" -Force
-```
-
-npm:
-
-```bash
-npm uninstall -g @rivolink/leaf
-```
-
-## Contributors
-
-Thanks to all contributors.
-
-![Contributors](https://contrib.rocks/image?repo=RivoLink/leaf&t=717807600)
-
-## Support
-
-Contributions are welcome. Feel free to open an issue or submit a pull request.
-
-See the [CONTRIBUTING.md](CONTRIBUTING.md) file for details.
-
-If you like **leaf**, consider giving the project a star ⭐
+leafling is a fork of [leaf](https://github.com/RivoLink/leaf) by [RivoLink](https://github.com/RivoLink). All credit for the excellent terminal Markdown previewer goes to the original author.
 
 ## License
 
-This project is licensed under the MIT License.
-
-See the [LICENSE](LICENSE) file for details.
+MIT

@@ -5,6 +5,8 @@ use crate::{
     app::{App, FileChange, FLASH_DURATION_MS},
     render::{ui, CONTENT_HORIZONTAL_PADDING, SCROLLBAR_WIDTH},
 };
+
+use crate::app::TranslationFlash;
 use anyhow::Result;
 use crossterm::event::{self, poll, Event, KeyEventKind};
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -22,6 +24,8 @@ const EDITOR_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS)
 const WATCH_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 const CONFIG_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
 const LINK_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
+const TRANSLATION_FLASH_DURATION: Duration = Duration::from_millis(FLASH_DURATION_MS);
+const TRANSLATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const DOUBLE_CLICK_THRESHOLD: Duration = Duration::from_millis(400);
 const MOUSE_SCROLL_STEP: usize = 3;
 
@@ -95,6 +99,12 @@ pub(crate) fn run(
             needs_redraw = true;
         }
 
+        if app.poll_translation() {
+            // Rebuild bilingual lines after translation progress
+            app.rebuild_bilingual_lines_with_syntect(ss, themes);
+            needs_redraw = true;
+        }
+
         if needs_redraw {
             terminal.draw(|f| ui(f, app))?;
             needs_redraw = false;
@@ -115,6 +125,9 @@ pub(crate) fn run(
         let link_flash_timeout = app
             .link_flash()
             .and_then(|(_, started)| LINK_FLASH_DURATION.checked_sub(started.elapsed()));
+        let translation_flash_timeout = app
+            .translation_flash()
+            .and_then(|(_, started)| TRANSLATION_FLASH_DURATION.checked_sub(started.elapsed()));
         let resize_timeout =
             pending_resize.and_then(|started| RESIZE_DEBOUNCE.checked_sub(started.elapsed()));
         let poll_timeout = [
@@ -133,6 +146,12 @@ pub(crate) fn run(
             watch_flash_timeout,
             config_flash_timeout,
             link_flash_timeout,
+            translation_flash_timeout,
+            if app.is_translation_enabled() && app.translation_receiver_active() {
+                Some(TRANSLATION_POLL_INTERVAL)
+            } else {
+                None
+            },
             resize_timeout,
         ]
         .into_iter()
@@ -260,6 +279,13 @@ pub(crate) fn run(
         if let Some((_, started)) = app.link_flash() {
             if started.elapsed() >= LINK_FLASH_DURATION {
                 app.clear_link_flash();
+                needs_redraw = true;
+            }
+        }
+
+        if let Some((_, started)) = app.translation_flash() {
+            if started.elapsed() >= TRANSLATION_FLASH_DURATION {
+                app.clear_translation_flash();
                 needs_redraw = true;
             }
         }
