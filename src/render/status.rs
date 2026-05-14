@@ -237,8 +237,8 @@ fn translation_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
     let theme = app_theme();
     let bar_bg = status_bar_bg();
     let (text, fg): (String, Color) = match flash {
-        TranslationFlash::Activated => (" Translation activated ".to_string(), theme.ui.status_success_fg),
-        TranslationFlash::Deactivated => (" Translation deactivated ".to_string(), theme.ui.status_warning_fg),
+        TranslationFlash::Activated => (" Switched to translated view ".to_string(), theme.ui.status_success_fg),
+        TranslationFlash::Deactivated => (" Switched to original view ".to_string(), theme.ui.status_warning_fg),
         TranslationFlash::NotConfigured => {
             (" Translation not configured ".to_string(), theme.ui.status_error_fg)
         }
@@ -251,12 +251,20 @@ fn translation_flash_section(app: &App) -> Option<Vec<Span<'static>>> {
 }
 
 pub(crate) fn status_translation_section(app: &App) -> Option<Vec<Span<'static>>> {
-    if !app.is_translation_enabled() {
-        return None;
-    }
     let theme = app_theme();
     match app.translation_status() {
-        crate::translation::TranslationStatus::Idle => None,
+        crate::translation::TranslationStatus::Idle => {
+            if app.is_translated_view() {
+                Some(vec![Span::styled(
+                    " ☰ zh ",
+                    Style::default()
+                        .fg(theme.ui.status_success_fg)
+                        .bg(theme.ui.status_success_bg),
+                )])
+            } else {
+                None
+            }
+        }
         crate::translation::TranslationStatus::Loading { completed, total } => Some(vec![
             Span::styled(
                 format!(" ☰ {}/{} ", completed, total),
@@ -266,13 +274,13 @@ pub(crate) fn status_translation_section(app: &App) -> Option<Vec<Span<'static>>
             ),
         ]),
         crate::translation::TranslationStatus::Done => Some(vec![Span::styled(
-            " ☰ translated ",
+            " ☰ zh ",
             Style::default()
                 .fg(theme.ui.status_success_fg)
                 .bg(theme.ui.status_success_bg),
         )]),
         crate::translation::TranslationStatus::Error(_) => Some(vec![Span::styled(
-            " ☰ error ",
+            " ☰ err ",
             Style::default()
                 .fg(theme.ui.status_error_fg)
                 .bg(theme.ui.status_error_bg),

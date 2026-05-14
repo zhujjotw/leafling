@@ -63,7 +63,7 @@ pub(crate) struct StatusCacheKey {
     watch_error: bool,
     config_flash_active: bool,
     link_flash_active: bool,
-    translation_enabled: bool,
+    translated_view: bool,
     translation_flash_active: bool,
 }
 
@@ -302,10 +302,8 @@ impl App {
     // Always >= 5 (scroll padding).
     // Use has_content() to check for actual content.
     pub(crate) fn total(&self) -> usize {
-        if self.translation.enabled {
-            if let Some(ref bl) = self.translation.bilingual_lines {
-                return bl.len();
-            }
+        if let Some(ref tl) = self.translation.translated_lines {
+            return tl.len();
         }
         self.lines.len()
     }
@@ -315,10 +313,8 @@ impl App {
     }
 
     pub(crate) fn visible_lines(&self, start: usize, end: usize) -> &[Line<'static>] {
-        if self.translation.enabled {
-            if let Some(ref bl) = self.translation.bilingual_lines {
-                return &bl[start..end];
-            }
+        if let Some(ref tl) = self.translation.translated_lines {
+            return &tl[start..end];
         }
         &self.lines[start..end]
     }
@@ -478,7 +474,7 @@ impl App {
                 .as_ref()
                 .map(|(_, t)| t.elapsed() < Duration::from_millis(FLASH_DURATION_MS))
                 .unwrap_or(false),
-            translation_enabled: self.translation.enabled,
+            translated_view: self.translation.translated_lines.is_some(),
             translation_flash_active: self
                 .translation_flash
                 .as_ref()
@@ -528,8 +524,8 @@ impl App {
             .unwrap_or_default()
     }
 
-    pub(crate) fn is_translation_enabled(&self) -> bool {
-        self.translation.enabled
+    pub(crate) fn is_translated_view(&self) -> bool {
+        self.translation.translated_lines.is_some()
     }
 
     pub(crate) fn translation_status(&self) -> &crate::translation::TranslationStatus {

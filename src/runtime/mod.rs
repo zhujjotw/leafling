@@ -100,8 +100,6 @@ pub(crate) fn run(
         }
 
         if app.poll_translation() {
-            // Rebuild bilingual lines after translation progress
-            app.rebuild_bilingual_lines_with_syntect(ss, themes);
             needs_redraw = true;
         }
 
@@ -147,7 +145,7 @@ pub(crate) fn run(
             config_flash_timeout,
             link_flash_timeout,
             translation_flash_timeout,
-            if app.is_translation_enabled() && app.translation_receiver_active() {
+            if app.translation_receiver_active() {
                 Some(TRANSLATION_POLL_INTERVAL)
             } else {
                 None

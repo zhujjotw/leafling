@@ -2,8 +2,8 @@ mod provider;
 mod render;
 mod segment;
 
-pub(crate) use provider::{build_provider, DeepLProvider, LLMProvider, TranslationProvider};
-pub(crate) use render::build_bilingual_lines;
+pub(crate) use provider::{build_provider, TranslationProvider};
+pub(crate) use render::build_translated_source;
 pub(crate) use segment::{extract_segments, Segment, SegmentKind};
 
 use crate::markdown::hash_str;
@@ -33,11 +33,10 @@ pub(crate) enum TranslationMsg {
 
 /// State for the translation feature.
 pub(crate) struct TranslationState {
-    pub(crate) enabled: bool,
     pub(crate) status: TranslationStatus,
     pub(crate) segments: Vec<Segment>,
     pub(crate) cache: HashMap<u64, String>,
-    pub(crate) bilingual_lines: Option<Vec<Line<'static>>>,
+    pub(crate) translated_lines: Option<Vec<Line<'static>>>,
     pub(crate) receiver: Option<mpsc::Receiver<TranslationMsg>>,
     pub(crate) cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -45,11 +44,10 @@ pub(crate) struct TranslationState {
 impl TranslationState {
     pub(crate) fn new() -> Self {
         Self {
-            enabled: false,
             status: TranslationStatus::Idle,
             segments: Vec::new(),
             cache: HashMap::new(),
-            bilingual_lines: None,
+            translated_lines: None,
             receiver: None,
             cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -57,17 +55,6 @@ impl TranslationState {
 
     pub(crate) fn invalidate(&mut self) {
         self.segments.clear();
-        self.bilingual_lines = None;
-        // Keep the cache - it can be reused
-    }
-
-    pub(crate) fn clear_cache(&mut self) {
-        self.cache.clear();
-    }
-
-    /// Check if a translation is available in cache.
-    pub(crate) fn get_cached(&self, text: &str) -> Option<&str> {
-        let hash = hash_str(text);
-        self.cache.get(&hash).map(|s| s.as_str())
+        self.translated_lines = None;
     }
 }

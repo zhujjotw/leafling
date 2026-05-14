@@ -120,6 +120,10 @@ impl App {
         self.invalidate_theme_preview_cache();
         self.store_current_theme_preview_from(&lines, &toc);
         self.replace_content(lines, toc, link_spans);
+        // Auto-start translation on file load if configured
+        if self.translation_config.is_configured() {
+            self.start_translation();
+        }
         true
     }
 
@@ -149,7 +153,7 @@ impl App {
         if !self.search.query.is_empty() && !self.search.mode {
             self.run_search();
         }
-        if self.translation.enabled {
+        if self.translation_config.is_configured() {
             self.translation.invalidate();
             self.start_translation();
         }
